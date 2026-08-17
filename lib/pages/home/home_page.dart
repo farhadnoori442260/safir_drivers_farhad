@@ -373,13 +373,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             styleString: 'assets/map/style.json', // 📍 فراخوانی استایل اختصاصی
             myLocationEnabled: false, // چون مارکر کاستوم مرکز صفحه داریم خاموش شد
             trackCameraPosition: true,
-            onCameraMoveStarted: () {
-              if (!isMapMoving) {
-                setState(() {
-                  isMapMoving = true;
-                });
-              }
-            },
+            
             onCameraIdle: () {
               if (isMapMoving) {
                 setState(() {
