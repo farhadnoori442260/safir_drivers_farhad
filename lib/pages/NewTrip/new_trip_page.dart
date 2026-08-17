@@ -345,7 +345,7 @@ class _NewTripPageState extends State<NewTripPage> {
                 styleString: 'assets/map/style.json',
                 onMapCreated: _onMapCreated,
                 myLocationEnabled: true,
-                myLocationTrackingMode: MyLocationTrackingMode.Tracking,
+                myLocationTrackingMode: MyLocationTrackingMode.tracking,
               ),
 
               // 📇 کارت مدرن اطلاعات سفیر در پایین صفحه
