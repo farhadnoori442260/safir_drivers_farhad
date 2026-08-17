@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.farhad.safir"> <!-- همگام‌سازی با نام پکیج سفیر راننده -->
+    
     
     <!-- این دسترسی صرفاً برای ارتباط ابزار فلاتر با برنامه در حالت دباگ و تست است -->
     <uses-permission android:name="android.permission.INTERNET"/>
