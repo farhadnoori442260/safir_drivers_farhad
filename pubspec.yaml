@@ -69,7 +69,7 @@ flutter:
 
   assets:
     #- assets/audio/
-    - assets/images/
+    #- assets/images/
     #- assets/auth/
     - assets/translations/
     - assets/map/style.json
