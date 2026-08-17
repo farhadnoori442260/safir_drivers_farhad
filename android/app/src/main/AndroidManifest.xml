@@ -18,7 +18,7 @@
         android:usesCleartextTraffic="true"> <!-- 👈 قفل دسترسی اینترنت نقشه در اندروید باز شد -->
         
         <activity
-            android:name="com.farhad.safir_driver.MainActivity"
+            android:name="com.farhad.safir.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
