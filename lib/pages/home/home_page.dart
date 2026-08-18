@@ -48,6 +48,51 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
+  // 🧪 تابع شبیه‌سازی حرکت و تست راهنمای صوتی
+  void startSimulatedTestDrive(NavigationController navController) async {
+    navController.startNavigation();
+
+    List<LatLng> simulatedPoints = [
+      const LatLng(34.5553, 69.2075),
+      const LatLng(34.5558, 69.2080),
+      const LatLng(34.5564, 69.2088),
+      const LatLng(34.5570, 69.2095),
+    ];
+
+    List<String> instructions = [
+      'direct_200m'.tr(),
+      'turn_right_50m'.tr(),
+      'turn_left_now'.tr(),
+      'arrived_destination'.tr(),
+    ];
+
+    List<IconData> icons = [
+      Icons.straight,
+      Icons.turn_right,
+      Icons.turn_left,
+      Icons.location_on,
+    ];
+
+    for (int i = 0; i < simulatedPoints.length; i++) {
+      await Future.delayed(const Duration(seconds: 4));
+
+      if (!mounted) return;
+
+      _animatedMapMove(simulatedPoints[i], 17.0);
+
+      String currentInstruction = instructions[i];
+      int remainingDistance = (200 - (i * 50));
+
+      navController.updateInstruction(
+        instruction: currentInstruction,
+        distance: remainingDistance > 0 ? remainingDistance : 0,
+        icon: icons[i],
+      );
+
+      navController.speakInstruction(currentInstruction);
+    }
+  }
+
   void listenForTripRequests() {
     tripRequestStream?.cancel();
     tripRequestStream = FirebaseFirestore.instance
@@ -624,6 +669,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ),
               ),
             ),
+
+          // 🧪 دکمه شناور تست حرکت و گوینده صوتی
+          Positioned(
+            bottom: 90,
+            right: 20,
+            child: FloatingActionButton.extended(
+              heroTag: 'test_drive_btn',
+              onPressed: () {
+                startSimulatedTestDrive(navController);
+              },
+              backgroundColor: SafirColors.primary,
+              icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+              label: const Text(
+                'تست حرکت و صدا',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
 
           // 🎯 دکمه موقعیت من (GPS)
           Positioned(
