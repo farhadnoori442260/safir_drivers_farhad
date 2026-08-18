@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import '../helpers/voice_guidance_helper.dart'; // مسیر هماهنگ‌شده هلپر صوتی
+import 'package:easy_localization/easy_localization.dart'; // 📌 اتصال به easy_localization
+import '../helpers/voice_guidance_helper.dart';
 
 class StepInstruction {
   final String instruction;
@@ -41,7 +42,7 @@ class NavigationController extends ChangeNotifier {
   String currentStreet = '';
   String currentModifier = 'straight';
   double distanceToNextStep = 0.0;
-  String _activeLangCode = 'fa'; // زبان فعال پیش‌فرض
+  String _activeLangCode = 'fa';
 
   final Set<int> _spokenSteps = {};
 
@@ -54,7 +55,6 @@ class NavigationController extends ChangeNotifier {
     _spokenSteps.clear();
     notifyListeners();
 
-    // فراخوانی API رایگان OSRM
     final url = Uri.parse(
       'https://router.project-osrm.org/route/v1/driving/'
       '${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}'
@@ -75,15 +75,14 @@ class NavigationController extends ChangeNotifier {
 
           if (_steps.isNotEmpty) {
             _updateCurrentStepInfo();
-            // اعلام شروع حرکت متناسب با زبان اپلیکیشن
             VoiceGuidanceHelper.speakStep('straight', _steps[0].streetName, 0, _activeLangCode);
           }
         }
       } else {
-        debugPrint("OSRM Error: ${response.statusCode}");
+        debugPrint('osrm_error_status'.tr(args: [response.statusCode.toString()]));
       }
     } catch (e) {
-      debugPrint("Error fetching navigation route: $e");
+      debugPrint('osrm_error_fetch'.tr(args: [e.toString()]));
     }
   }
 
@@ -97,7 +96,6 @@ class NavigationController extends ChangeNotifier {
 
     final currentStep = _steps[_currentStepIndex];
 
-    // محاسبه فاصله زنده راننده تا پیچ بعدی (به متر)
     double distance = Geolocator.distanceBetween(
       driverLatLng.latitude,
       driverLatLng.longitude,
@@ -107,7 +105,6 @@ class NavigationController extends ChangeNotifier {
 
     distanceToNextStep = distance;
 
-    // 🔊 پخش هشدار صوتی در ۵۰ متری پیچ با زبان فعال راننده
     if (distance <= 50 && !_spokenSteps.contains(_currentStepIndex)) {
       _spokenSteps.add(_currentStepIndex);
       VoiceGuidanceHelper.speakStep(
@@ -118,7 +115,6 @@ class NavigationController extends ChangeNotifier {
       );
     }
 
-    // 🔄 رفتن به گام بعدی پس از رد شدن از پیچ (کمتر از ۱۵ متر)
     if (distance < 15 && _currentStepIndex < _steps.length - 1) {
       _currentStepIndex++;
       _updateCurrentStepInfo();
