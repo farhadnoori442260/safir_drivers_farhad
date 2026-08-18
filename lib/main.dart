@@ -1,21 +1,24 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:easy_localization/easy_localization.dart';
 
-import 'package:safir_drivers/pages/splash_screen.dart'; // 👈 اضافه شدن فایل اسپلش
+import 'package:safir_drivers/constants/app_colors.dart'; // 📌 اتصال به پالت رنگی اصلی سفیر
+import 'package:safir_drivers/pages/splash_screen.dart';
 import 'package:safir_drivers/providers/authentication_provider.dart';
 import 'package:safir_drivers/providers/dashboard_provider.dart';
 import 'package:safir_drivers/providers/registration_provider.dart';
 import 'package:safir_drivers/providers/trip_provider.dart';
+import 'package:safir_drivers/controllers/navigation_controller.dart';
 import 'package:safir_drivers/utils/lang_helper.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-const Color safirColor = Color(0xFF145A41);
 
 Future<void> main() async {
+  WidgetsBinding.instance;
   WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
   await Firebase.initializeApp();
   
   try {
@@ -23,7 +26,19 @@ Future<void> main() async {
     await Permission.notification.request();
   } catch (_) {}
 
-  runApp(const MyApp());
+  runApp(
+    EasyLocalization(
+      supportedLocales: const [
+        Locale('fa'), // دری
+        Locale('ps'), // پشتو
+        Locale('en'), // انگلیسی
+      ],
+      path: 'assets/translations',
+      fallbackLocale: const Locale('fa'),
+      startLocale: const Locale('fa'),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -38,6 +53,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthenticationProvider()),
         ChangeNotifierProvider(create: (_) => RegistrationProvider()),
         ChangeNotifierProvider(create: (_) => TripProvider()),
+        ChangeNotifierProvider(create: (_) => NavigationController()),
       ],
       child: Consumer<AppLanguageProvider>(
         builder: (context, appLanguage, child) {
@@ -45,24 +61,18 @@ class MyApp extends StatelessWidget {
             navigatorKey: navigatorKey,
             title: 'Safir Drivers',
             debugShowCheckedModeBanner: false,
-            locale: appLanguage.appLocal,
-            supportedLocales: const [
-              Locale('fa', 'AF'),
-              Locale('ps', 'AF'),
-              Locale('en', 'US'),
-            ],
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
+            localizationsDelegates: context.localizationDelegates,
+            supportedLocales: context.supportedLocales,
+            locale: context.locale,
             theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: safirColor),
+              // 📌 فراخوانی رنگ اصلی (سبز سفیر) از SafirColors
+              colorScheme: ColorScheme.fromSeed(seedColor: SafirColors.primary),
+              primaryColor: SafirColors.primary,
+              scaffoldBackgroundColor: SafirColors.background,
               fontFamily: 'IranYekan',
               useMaterial3: true,
             ),
-            home: const SplashScreen(), // 👈 فراخوانی اسپلش اسکرین جداگانه
+            home: const SplashScreen(),
           );
         },
       ),
