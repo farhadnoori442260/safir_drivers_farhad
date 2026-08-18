@@ -6,7 +6,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:easy_localization/easy_localization.dart'; // 📌 پکیج رسمی چندزبانه هماهنگ با مسافر
+import 'package:easy_localization/easy_localization.dart';
+
+import 'package:safir_drivers/constants/app_colors.dart'; // 📌 اتصال به پالت اصلی
+import 'package:safir_drivers/controllers/navigation_controller.dart'; // 📌 اتصال به کنترلر مسیریابی و صوتی
 import 'package:safir_drivers/providers/registration_provider.dart'; 
 import '../../push_notifications/push_notification_system.dart';
 
@@ -19,14 +22,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   MapLibreMapController? mapController;
-color: SafirColors.primaryButton,
-
-  // 🎨 ثابت‌های رنگی پالت سفیر (یکسان با اپلیکیشن مسافر)
-  static const Color safirPrimaryButton = Color(0xFF1B7A57);
-  static const Color safirButtonPressed = Color(0xFF0F4A35);
-  static const Color safirCardBgLight = Color(0xFFEAF6F1);
-  static const Color safirSuccessColor = Color(0xFF22C55E);
-  static const Color safirButtonTextColor = Color(0xFFFFFFFF);
 
   Position? currentPositionOfDriver;
   LatLng currentLatLng = const LatLng(34.5553, 69.2075); // کابل
@@ -254,12 +249,12 @@ color: SafirColors.primaryButton,
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: const BoxDecoration(
-                  color: safirCardBgLight,
+                  color: SafirColors.cardBgLight,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.power_settings_new,
-                  color: safirPrimaryButton,
+                  color: SafirColors.primary,
                   size: 32,
                 ),
               ),
@@ -318,9 +313,9 @@ color: SafirColors.primaryButton,
                       style: ButtonStyle(
                         backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
                           if (states.contains(WidgetState.pressed)) {
-                            return safirButtonPressed;
+                            return SafirColors.primaryButtonPressed;
                           }
-                          return isDriverAvailable ? Colors.red.shade700 : safirPrimaryButton;
+                          return isDriverAvailable ? Colors.red.shade700 : SafirColors.primary;
                         }),
                         shape: WidgetStateProperty.all(
                           RoundedRectangleBorder(
@@ -335,7 +330,7 @@ color: SafirColors.primaryButton,
                       child: Text(
                         'confirm'.tr(),
                         style: const TextStyle(
-                          color: safirButtonTextColor, 
+                          color: SafirColors.buttonTextColor, 
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
                         ),
@@ -374,8 +369,10 @@ color: SafirColors.primaryButton,
 
   @override
   Widget build(BuildContext context) {
+    final navController = Provider.of<NavigationController>(context);
+
     return Scaffold(
-      backgroundColor: safirCardBgLight,
+      backgroundColor: SafirColors.cardBgLight,
       body: Stack(
         children: [
           // 🗺️ نقشه MapLibre
@@ -423,7 +420,7 @@ color: SafirColors.primaryButton,
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: safirPrimaryButton,
+                        color: SafirColors.primary,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 3),
                         boxShadow: [
@@ -468,72 +465,165 @@ color: SafirColors.primaryButton,
             ),
           ),
 
-          // 🔘 دکمه وضعیت آنلاین / آفلاین
-          Positioned(
-            top: 24,
-            left: 20,
-            right: 20,
-            child: SafeArea(
-              child: Center(
+          // 🔊 📌 بنر تصویری مسیریابی + گوینده صوتی (هنگام فعال بودن سفر)
+          if (navController.isNavigating)
+            Positioned(
+              top: 10,
+              left: 16,
+              right: 16,
+              child: SafeArea(
                 child: Container(
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
+                    color: SafirColors.primary,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: const [
                       BoxShadow(
-                        color: (isDriverAvailable ? Colors.red.shade900 : safirPrimaryButton).withOpacity(0.3),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: ElevatedButton(
-                    onPressed: _showStatusChangeModal,
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-                        if (states.contains(WidgetState.pressed)) {
-                          return safirButtonPressed;
-                        }
-                        return isDriverAvailable ? Colors.red.shade600 : safirPrimaryButton;
-                      }),
-                      padding: WidgetStateProperty.all(
-                        const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                      ),
-                      shape: WidgetStateProperty.all(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                  child: Row(
+                    children: [
+                      // آیکون تصویری گردش
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          navController.currentTurnIcon,
+                          color: Colors.white,
+                          size: 36,
                         ),
                       ),
-                      elevation: WidgetStateProperty.all(0),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isDriverAvailable ? safirSuccessColor : Colors.white70,
-                          ),
+                      const SizedBox(width: 14),
+                      // متن دستور مسیریابی و فاصله
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${navController.distanceToNextTurn} ${'meters'.tr()}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              navController.navigationInstruction,
+                              style: const TextStyle(
+                                color: Colors.white90,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          isDriverAvailable 
-                              ? 'status_offline_btn'.tr() 
-                              : 'status_online_btn'.tr(),
-                          style: const TextStyle(
-                            color: safirButtonTextColor, 
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                      ),
+                      // دکمه قطع / وصل صدای گوینده
+                      IconButton(
+                        onPressed: () {
+                          navController.toggleVoice();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                navController.isVoiceEnabled
+                                    ? 'voice_enabled'.tr()
+                                    : 'voice_disabled'.tr(),
+                              ),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        icon: Icon(
+                          navController.isVoiceEnabled
+                              ? Icons.volume_up_rounded
+                              : Icons.volume_off_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // 🔘 دکمه وضعیت آنلاین / آفلاین (هنگامی که مسیریابی فعال نیست)
+          if (!navController.isNavigating)
+            Positioned(
+              top: 24,
+              left: 20,
+              right: 20,
+              child: SafeArea(
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (isDriverAvailable ? Colors.red.shade900 : SafirColors.primary).withOpacity(0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
                         ),
                       ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: _showStatusChangeModal,
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(WidgetState.pressed)) {
+                            return SafirColors.primaryButtonPressed;
+                          }
+                          return isDriverAvailable ? Colors.red.shade600 : SafirColors.primary;
+                        }),
+                        padding: WidgetStateProperty.all(
+                          const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                        ),
+                        shape: WidgetStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        elevation: WidgetStateProperty.all(0),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isDriverAvailable ? SafirColors.success : Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            isDriverAvailable 
+                                ? 'status_offline_btn'.tr() 
+                                : 'status_online_btn'.tr(),
+                            style: const TextStyle(
+                              color: SafirColors.buttonTextColor, 
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
           // 🎯 دکمه موقعیت من (GPS)
           Positioned(
@@ -545,7 +635,7 @@ color: SafirColors.primaryButton,
               backgroundColor: Colors.white,
               elevation: 4,
               shape: const CircleBorder(),
-              child: const Icon(Icons.my_location, color: safirPrimaryButton, size: 26),
+              child: const Icon(Icons.my_location, color: SafirColors.primary, size: 26),
             ),
           ),
         ],
