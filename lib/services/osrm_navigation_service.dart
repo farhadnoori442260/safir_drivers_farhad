@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:maplibre_gl/maplibre_gl.dart'; // 📌 جایگزینی google_maps_flutter با maplibre_gl
+import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:easy_localization/easy_localization.dart'; // 📌 اتصال به easy_localization
 import '../models/navigation_step_model.dart';
 
 class OSRMNavigationService {
@@ -33,10 +34,10 @@ class OSRMNavigationService {
           return steps;
         }
       } else {
-        debugPrint('خطای OSRM: کد وضعیت ${response.statusCode}');
+        debugPrint('osrm_status_error'.tr(args: [response.statusCode.toString()]));
       }
     } catch (e) {
-      debugPrint('خطا در برقراری ارتباط با OSRM: $e');
+      debugPrint('osrm_connection_error'.tr(args: [e.toString()]));
     }
 
     return [];
