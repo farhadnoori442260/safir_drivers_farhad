@@ -7,7 +7,6 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:easy_localization/easy_localization.dart'; // 📌 پکیج رسمی چندزبانه هماهنگ با مسافر
-
 import 'package:safir_drivers/providers/registration_provider.dart'; 
 import '../../push_notifications/push_notification_system.dart';
 
@@ -20,6 +19,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   MapLibreMapController? mapController;
+color: SafirColors.primaryButton,
 
   // 🎨 ثابت‌های رنگی پالت سفیر (یکسان با اپلیکیشن مسافر)
   static const Color safirPrimaryButton = Color(0xFF1B7A57);
