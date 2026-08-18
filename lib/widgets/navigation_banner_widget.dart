@@ -41,7 +41,7 @@ class NavigationBannerWidget extends StatelessWidget {
     }
   }
 
-  // فرمت کردن فاصله (تبدیل متر به کیلومتر در صورت نیاز)
+  // فرمت کردن فاصله (تبدیل متر به کیلومتر در صورت نیاز) با استفاده از easy_localization
   String _formatDistance(double meters) {
     if (meters >= 1000) {
       return '${(meters / 1000).toStringAsFixed(1)} ${'km'.tr()}';
@@ -59,7 +59,7 @@ class NavigationBannerWidget extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: SafirColors.brandDark, // استفاده از پالت یکسان سفیر
+            color: SafirColors.brandDark, // اتصال به پالت اصلی سفیر
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
@@ -75,18 +75,18 @@ class NavigationBannerWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: SafirColors.buttonTextColor.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   _getTurnIcon(modifier),
-                  color: const Color(0xFFFF9900), // رنگ هشدار پویای مسیریابی
+                  color: const Color(0xFFFF9900), // رنگ نارنجی/زرد برند سفیر
                   size: 34,
                 ),
               ),
               const SizedBox(width: 14),
               
-              // متن اطلاعات خیابان و فاصله
+              // متن اطلاعات خیابان و فاصله با اتصال مستقیم به فایل‌های JSON
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +95,7 @@ class NavigationBannerWidget extends StatelessWidget {
                     Text(
                       _formatDistance(distanceToNext),
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: SafirColors.buttonTextColor,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -105,8 +105,8 @@ class NavigationBannerWidget extends StatelessWidget {
                       nextStreet.isEmpty 
                           ? 'continue_straight'.tr() 
                           : 'enter_street'.tr(args: [nextStreet]),
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: SafirColors.buttonTextColor.withOpacity(0.8),
                         fontSize: 13,
                       ),
                       maxLines: 1,
@@ -121,7 +121,7 @@ class NavigationBannerWidget extends StatelessWidget {
                 onPressed: onMuteToggle,
                 icon: Icon(
                   isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                  color: Colors.white,
+                  color: SafirColors.buttonTextColor,
                   size: 24,
                 ),
               ),
