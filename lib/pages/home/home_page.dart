@@ -3,12 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:maplibre_gl/maplibre_gl.dart'; // 📌 پکیج جدید نقشه
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:safir_drivers/providers/registration_provider.dart'; 
-import 'package:safir_drivers/utils/lang_helper.dart';
+import 'package:easy_localization/easy_localization.dart'; // 📌 پکیج رسمی چندزبانه هماهنگ با مسافر
 
+import 'package:safir_drivers/providers/registration_provider.dart'; 
 import '../../push_notifications/push_notification_system.dart';
 
 class HomePage extends StatefulWidget {
@@ -21,14 +21,12 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   MapLibreMapController? mapController;
 
-  
-  // 🎨 رنگ‌های برند سفیر
-  static const Color brandPrimary = Color(0xFF145A41);   
-  static const Color btnPrimary = Color(0xFF1B7A57);     
-  static const Color btnPressed = Color(0xFF0F4A35);     
-  static const Color cardBgLight = Color(0xFFEAF6F1);    
-  static const Color successColor = Color(0xFF22C55E);   
-  static const Color textOnBtn = Color(0xFFFFFFFF);      
+  // 🎨 ثابت‌های رنگی پالت سفیر (یکسان با اپلیکیشن مسافر)
+  static const Color safirPrimaryButton = Color(0xFF1B7A57);
+  static const Color safirButtonPressed = Color(0xFF0F4A35);
+  static const Color safirCardBgLight = Color(0xFFEAF6F1);
+  static const Color safirSuccessColor = Color(0xFF22C55E);
+  static const Color safirButtonTextColor = Color(0xFFFFFFFF);
 
   Position? currentPositionOfDriver;
   LatLng currentLatLng = const LatLng(34.5553, 69.2075); // کابل
@@ -38,13 +36,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   StreamSubscription<Position>? positionStreamHomePage;
   StreamSubscription<QuerySnapshot>? tripRequestStream;
 
-  // 🗺️ آن‌کال شدن کنترلر هنگام ساخته شدن نقشه
   void _onMapCreated(MapLibreMapController controller) {
-
     mapController = controller;
   }
 
-  // 🚀 جابه‌جایی انیمیشنی نقشه به موقعیت جدید
   void _animatedMapMove(LatLng destLocation, double destZoom) {
     if (!mounted || mapController == null) return;
 
@@ -59,6 +54,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   void listenForTripRequests() {
+    tripRequestStream?.cancel();
     tripRequestStream = FirebaseFirestore.instance
         .collection('rides')
         .where('status', isEqualTo: 'requested')
@@ -67,13 +63,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.added) {
           String tripID = change.doc.id;
-          PushNotificationSystem().retrieveTripRequestInfo(tripID, context);
+          if (mounted) {
+            PushNotificationSystem().retrieveTripRequestInfo(tripID, context);
+          }
         }
       }
     });
   }
 
-  getCurrentLiveLocationOfDriver() async {
+  Future<void> getCurrentLiveLocationOfDriver() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -99,12 +97,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   _loadDriverStatus() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool status = prefs.getBool('isDriverAvailable') ?? false;
+    if (!mounted) return;
+
     setState(() {
-      isDriverAvailable = prefs.getBool('isDriverAvailable') ?? false;
-      if (isDriverAvailable) {
-        goOnlineNow();
-      }
+      isDriverAvailable = status;
     });
+
+    if (isDriverAvailable) {
+      goOnlineNow();
+      setAndGetLocationUpdates();
+      listenForTripRequests();
+    }
   }
 
   _saveDriverStatus(bool status) async {
@@ -113,7 +117,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   goOnlineNow() async {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    String uid = user.uid;
 
     if (currentPositionOfDriver != null) {
       await FirebaseFirestore.instance.collection("onlineDrivers").doc(uid).set({
@@ -134,6 +140,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   setAndGetLocationUpdates() {
+    positionStreamHomePage?.cancel();
     positionStreamHomePage = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
@@ -150,28 +157,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       });
 
       if (isDriverAvailable) {
-        String uid = FirebaseAuth.instance.currentUser!.uid;
-        FirebaseFirestore.instance.collection("onlineDrivers").doc(uid).set({
-          "driverId": uid,
-          "latitude": position.latitude,
-          "longitude": position.longitude,
-          "last_active": FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          FirebaseFirestore.instance.collection("onlineDrivers").doc(user.uid).set({
+            "driverId": user.uid,
+            "latitude": position.latitude,
+            "longitude": position.longitude,
+            "last_active": FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
       }
     });
   }
 
   goOfflineNow() async {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
-    
-    await FirebaseFirestore.instance.collection("onlineDrivers").doc(uid).delete();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String uid = user.uid;
+      
+      await FirebaseFirestore.instance.collection("onlineDrivers").doc(uid).delete();
 
-    await FirebaseFirestore.instance.collection("drivers").doc(uid).update({
-      "newTripStatus": "offline",
-      "isOnline": false,
-    }).catchError((e) {
-      debugPrint("Error going offline: $e");
-    });
+      await FirebaseFirestore.instance.collection("drivers").doc(uid).update({
+        "newTripStatus": "offline",
+        "isOnline": false,
+      }).catchError((e) {
+        debugPrint("Error going offline: $e");
+      });
+    }
 
     positionStreamHomePage?.cancel();
     tripRequestStream?.cancel();
@@ -190,9 +202,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     initializePushNotificationSystem();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<RegistrationProvider>(context, listen: false)
-          .retrieveCurrentDriverInfo();
-      getCurrentLiveLocationOfDriver();
+      if (mounted) {
+        Provider.of<RegistrationProvider>(context, listen: false)
+            .retrieveCurrentDriverInfo();
+        getCurrentLiveLocationOfDriver();
+      }
     });
   }
 
@@ -240,23 +254,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: const BoxDecoration(
-                  color: cardBgLight,
+                  color: safirCardBgLight,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.power_settings_new,
-                  color: brandPrimary,
+                  color: safirPrimaryButton,
                   size: 32,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
                 (!isDriverAvailable)
-                    ? tr(context, 'change_to_online_title')
-                    : tr(context, 'change_to_offline_title'),
+                    ? 'change_to_online_title'.tr()
+                    : 'change_to_offline_title'.tr(),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontFamily: 'IranYekan',
                   fontSize: 18,
                   color: Colors.black87,
                   fontWeight: FontWeight.bold,
@@ -265,11 +278,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               const SizedBox(height: 10),
               Text(
                 (!isDriverAvailable)
-                    ? tr(context, 'change_to_online_desc')
-                    : tr(context, 'change_to_offline_desc'),
+                    ? 'change_to_online_desc'.tr()
+                    : 'change_to_offline_desc'.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontFamily: 'IranYekan',
                   color: Colors.grey.shade600,
                   fontSize: 13,
                   height: 1.5,
@@ -284,26 +296,31 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         if (!isDriverAvailable) {
                           goOnlineNow();
                           setAndGetLocationUpdates();
+                          listenForTripRequests();
                           Navigator.pop(context);
-                          setState(() {
-                            isDriverAvailable = true;
-                          });
+                          if (mounted) {
+                            setState(() {
+                              isDriverAvailable = true;
+                            });
+                          }
                           _saveDriverStatus(true);
                         } else {
                           goOfflineNow();
                           Navigator.pop(context);
-                          setState(() {
-                            isDriverAvailable = false;
-                          });
+                          if (mounted) {
+                            setState(() {
+                              isDriverAvailable = false;
+                            });
+                          }
                           _saveDriverStatus(false);
                         }
                       },
                       style: ButtonStyle(
                         backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
                           if (states.contains(WidgetState.pressed)) {
-                            return btnPressed;
+                            return safirButtonPressed;
                           }
-                          return isDriverAvailable ? Colors.red.shade700 : btnPrimary;
+                          return isDriverAvailable ? Colors.red.shade700 : safirPrimaryButton;
                         }),
                         shape: WidgetStateProperty.all(
                           RoundedRectangleBorder(
@@ -316,10 +333,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ),
                       child: Text(
-                        tr(context, 'confirm'),
+                        'confirm'.tr(),
                         style: const TextStyle(
-                          fontFamily: 'IranYekan', 
-                          color: textOnBtn, 
+                          color: safirButtonTextColor, 
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
                         ),
@@ -338,9 +354,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: Text(
-                        tr(context, 'cancel'),
+                        'cancel'.tr(),
                         style: TextStyle(
-                          fontFamily: 'IranYekan', 
                           color: Colors.grey.shade700,
                           fontWeight: FontWeight.bold,
                         ),
@@ -360,22 +375,29 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: cardBgLight,
+      backgroundColor: safirCardBgLight,
       body: Stack(
         children: [
-          // 🗺️ نقشه MapLibre با استایل اختصاصی JSON
+          // 🗺️ نقشه MapLibre
           MapLibreMap(
             onMapCreated: _onMapCreated,
             initialCameraPosition: CameraPosition(
               target: currentLatLng,
               zoom: 16.0,
             ),
-            styleString: 'assets/map/style.json', // 📍 فراخوانی استایل اختصاصی
-            myLocationEnabled: false, // چون مارکر کاستوم مرکز صفحه داریم خاموش شد
+            styleString: 'assets/map/style.json',
+            myLocationEnabled: false,
             trackCameraPosition: true,
             
+            onCameraMoveStarted: () {
+              if (!isMapMoving && mounted) {
+                setState(() {
+                  isMapMoving = true;
+                });
+              }
+            },
             onCameraIdle: () {
-              if (isMapMoving) {
+              if (isMapMoving && mounted) {
                 setState(() {
                   isMapMoving = false;
                   if (mapController != null) {
@@ -401,7 +423,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: brandPrimary,
+                        color: safirPrimaryButton,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 3),
                         boxShadow: [
@@ -458,7 +480,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: (isDriverAvailable ? Colors.red.shade900 : brandPrimary).withOpacity(0.3),
+                        color: (isDriverAvailable ? Colors.red.shade900 : safirPrimaryButton).withOpacity(0.3),
                         blurRadius: 16,
                         offset: const Offset(0, 6),
                       ),
@@ -469,9 +491,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     style: ButtonStyle(
                       backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
                         if (states.contains(WidgetState.pressed)) {
-                          return btnPressed;
+                          return safirButtonPressed;
                         }
-                        return isDriverAvailable ? Colors.red.shade600 : brandPrimary;
+                        return isDriverAvailable ? Colors.red.shade600 : safirPrimaryButton;
                       }),
                       padding: WidgetStateProperty.all(
                         const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
@@ -491,17 +513,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           height: 10,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isDriverAvailable ? successColor : Colors.white70,
+                            color: isDriverAvailable ? safirSuccessColor : Colors.white70,
                           ),
                         ),
                         const SizedBox(width: 10),
                         Text(
                           isDriverAvailable 
-                              ? tr(context, 'status_offline_btn') 
-                              : tr(context, 'status_online_btn'),
+                              ? 'status_offline_btn'.tr() 
+                              : 'status_online_btn'.tr(),
                           style: const TextStyle(
-                            fontFamily: 'IranYekan', 
-                            color: textOnBtn, 
+                            color: safirButtonTextColor, 
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -524,7 +545,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               backgroundColor: Colors.white,
               elevation: 4,
               shape: const CircleBorder(),
-              child: const Icon(Icons.my_location, color: brandPrimary, size: 26),
+              child: const Icon(Icons.my_location, color: safirPrimaryButton, size: 26),
             ),
           ),
         ],
