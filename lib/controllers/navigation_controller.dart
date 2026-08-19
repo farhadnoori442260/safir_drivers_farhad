@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:easy_localization/easy_localization.dart'; // 📌 اتصال به easy_localization
+import 'package:easy_localization/easy_localization.dart';
 import '../helpers/voice_guidance_helper.dart';
 
 class StepInstruction {
@@ -36,6 +37,8 @@ class StepInstruction {
 
 class NavigationController extends ChangeNotifier {
   bool isNavigating = false;
+  bool _isVoiceEnabled = true;
+
   List<StepInstruction> _steps = [];
   int _currentStepIndex = 0;
 
@@ -44,16 +47,63 @@ class NavigationController extends ChangeNotifier {
   double distanceToNextStep = 0.0;
   String _activeLangCode = 'fa';
 
+  String _currentInstruction = '';
+  IconData _currentTurnIcon = Icons.straight;
+
   final Set<int> _spokenSteps = {};
 
-  /// 🚀 دریافت مسیر از OSRM و شروع مسیریابی
-  Future<void> startNavigation(LatLng start, LatLng destination, String langCode) async {
+  // 📌 Getters مورد نیاز HomePage
+  bool get isVoiceEnabled => _isVoiceEnabled;
+  int get distanceToNextTurn => distanceToNextStep.toInt();
+  String get navigationInstruction => _currentInstruction.isNotEmpty ? _currentInstruction : currentStreet;
+  IconData get currentTurnIcon => _currentTurnIcon;
+
+  /// 🔊 قطع و وصل صدای گوینده
+  void toggleVoice() {
+    _isVoiceEnabled = !_isVoiceEnabled;
+    if (!_isVoiceEnabled) {
+      VoiceGuidanceHelper.stop();
+    }
+    notifyListeners();
+  }
+
+  /// 🔊 پخش دستی یا شبیه‌سازی شده دستور صوتی
+  void speakInstruction(String text) {
+    if (_isVoiceEnabled) {
+      VoiceGuidanceHelper.speakStep('straight', text, 0, _activeLangCode);
+    }
+  }
+
+  /// 📝 بروزرسانی دستورات صوتی و آیکون (مخصوص تست شبیه‌سازی)
+  void updateInstruction({
+    required String instruction,
+    required int distance,
+    required IconData icon,
+  }) {
+    _currentInstruction = instruction;
+    distanceToNextStep = distance.toDouble();
+    _currentTurnIcon = icon;
+    notifyListeners();
+  }
+
+  /// 🚀 شروع ساده مسیریابی (جهت تست شبیه‌سازی در HomePage)
+  void startNavigationSimulated() {
+    isNavigating = true;
+    _currentStepIndex = 0;
+    _spokenSteps.clear();
+    notifyListeners();
+  }
+
+  /// 🚀 دریافت مسیر اصلی از OSRM و شروع مسیریابی
+  Future<void> startNavigation([LatLng? start, LatLng? destination, String langCode = 'fa']) async {
     isNavigating = true;
     _activeLangCode = langCode;
     _steps.clear();
     _currentStepIndex = 0;
     _spokenSteps.clear();
     notifyListeners();
+
+    if (start == null || destination == null) return;
 
     final url = Uri.parse(
       'https://router.project-osrm.org/route/v1/driving/'
@@ -75,7 +125,9 @@ class NavigationController extends ChangeNotifier {
 
           if (_steps.isNotEmpty) {
             _updateCurrentStepInfo();
-            VoiceGuidanceHelper.speakStep('straight', _steps[0].streetName, 0, _activeLangCode);
+            if (_isVoiceEnabled) {
+              VoiceGuidanceHelper.speakStep('straight', _steps[0].streetName, 0, _activeLangCode);
+            }
           }
         }
       } else {
@@ -107,12 +159,14 @@ class NavigationController extends ChangeNotifier {
 
     if (distance <= 50 && !_spokenSteps.contains(_currentStepIndex)) {
       _spokenSteps.add(_currentStepIndex);
-      VoiceGuidanceHelper.speakStep(
-        currentStep.modifier,
-        currentStep.streetName,
-        distance.toInt(),
-        _activeLangCode,
-      );
+      if (_isVoiceEnabled) {
+        VoiceGuidanceHelper.speakStep(
+          currentStep.modifier,
+          currentStep.streetName,
+          distance.toInt(),
+          _activeLangCode,
+        );
+      }
     }
 
     if (distance < 15 && _currentStepIndex < _steps.length - 1) {
@@ -128,7 +182,22 @@ class NavigationController extends ChangeNotifier {
       final step = _steps[_currentStepIndex];
       currentStreet = step.streetName;
       currentModifier = step.modifier;
+      _currentInstruction = step.streetName;
+      _currentTurnIcon = _getIconFromModifier(step.modifier);
       notifyListeners();
+    }
+  }
+
+  IconData _getIconFromModifier(String modifier) {
+    switch (modifier) {
+      case 'right':
+      case 'slight right':
+        return Icons.turn_right;
+      case 'left':
+      case 'slight left':
+        return Icons.turn_left;
+      default:
+        return Icons.straight;
     }
   }
 
