@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package0cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -8,8 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-import 'package:safir_drivers/utils/app_colors.dart'; // 📌 اتصال به پالت اصلی
-import 'package:safir_drivers/controllers/navigation_controller.dart'; // 📌 اتصال به کنترلر مسیریابی و صوتی
+import 'package:safir_drivers/utils/app_colors.dart';
+import 'package:safir_drivers/controllers/navigation_controller.dart';
 import 'package:safir_drivers/providers/registration_provider.dart'; 
 import '../../push_notifications/push_notification_system.dart';
 
@@ -48,16 +48,64 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🧪 تابع شبیه‌سازی حرکت و تست راهنمای صوتی
-  void startSimulatedTestDrive(NavigationController navController) async {
-    navController.startNavigation();
+  /// 📌 متد رسم خط سبز مسیر روی سرک
+  Future<void> _drawRoutePolyline(List<LatLng> points) async {
+    if (mapController == null || points.isEmpty) return;
 
+    await mapController!.clearLines(); // پاک کردن خطوط قبلی
+
+    await mapController!.addLine(
+      LineOptions(
+        geometry: points,
+        lineColor: "#1B7A57", // رنگ سبز برند سفیر
+        lineWidth: 6.0,
+        lineOpacity: 0.85,
+      ),
+    );
+  }
+
+  /// 📌 پاک کردن خط مسیر از روی نقشه
+  Future<void> _clearRoutePolyline() async {
+    if (mapController != null) {
+      await mapController!.clearLines();
+    }
+  }
+
+  /// 🚀 شروع مسیریابی واقعی به همراه رسم خط روی سرک
+  Future<void> startRealNavigation(LatLng start, LatLng destination) async {
+    final navController = Provider.of<NavigationController>(context, listen: false);
+
+    // دریافت نقاط مسیر از OSRM
+    List<LatLng> points = await navController.startNavigation(
+      start,
+      destination,
+      context.locale.languageCode,
+    );
+
+    // رسم خط روی نقشه
+    if (points.isNotEmpty) {
+      await _drawRoutePolyline(points);
+      _animatedMapMove(start, 17.0);
+    }
+  }
+
+  /// 🧪 تابع شبیه‌سازی حرکت و تست راهنمای صوتی
+  void startSimulatedTestDrive(NavigationController navController) async {
     List<LatLng> simulatedPoints = [
       const LatLng(34.5553, 69.2075),
       const LatLng(34.5558, 69.2080),
       const LatLng(34.5564, 69.2088),
       const LatLng(34.5570, 69.2095),
     ];
+
+    // شروع مسیریابی و رسم خط شبیه‌سازی
+    await navController.startNavigation(
+      simulatedPoints.first,
+      simulatedPoints.last,
+      context.locale.languageCode,
+    );
+
+    await _drawRoutePolyline(simulatedPoints);
 
     List<String> instructions = [
       'continue_straight'.tr(),
@@ -184,17 +232,36 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     positionStreamHomePage = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 5,
+        distanceFilter: 3,
       ),
     ).listen((Position position) {
       currentPositionOfDriver = position;
-      LatLng newLatLng = LatLng(position.latitude, position.longitude);
+      LatLng rawLatLng = LatLng(position.latitude, position.longitude);
 
       if (!mounted) return;
 
-      setState(() {
-        currentLatLng = newLatLng;
-      });
+      final navController = Provider.of<NavigationController>(context, listen: false);
+
+      if (navController.isNavigating) {
+        // 📌 بروزرسانی موقعیت راننده و قفل شدن روی خط سرک
+        navController.updateDriverPosition(
+          rawLatLng,
+          langCode: context.locale.languageCode,
+        );
+
+        // استفاده از موقعیت قفل شده روی سرک
+        LatLng activeLocation = navController.snappedDriverLocation ?? rawLatLng;
+
+        setState(() {
+          currentLatLng = activeLocation;
+        });
+
+        _animatedMapMove(activeLocation, 17.5);
+      } else {
+        setState(() {
+          currentLatLng = rawLatLng;
+        });
+      }
 
       if (isDriverAvailable) {
         final user = FirebaseAuth.instance.currentUser;
@@ -510,7 +577,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
 
-          // 🔊 📌 بنر تصویری مسیریابی + گوینده صوتی (هنگام فعال بودن سفر)
+          // 🔊 📌 بنر تصویری مسیریابی + دکمه لغو مسیریابی
           if (navController.isNavigating)
             Positioned(
               top: 10,
@@ -532,7 +599,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                   child: Row(
                     children: [
-                      // آیکون تصویری گردش
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -546,7 +612,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(width: 14),
-                      // متن دستور مسیریابی و فاصله
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,25 +638,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ],
                         ),
                       ),
-                      // دکمه قطع / وصل صدای گوینده
                       IconButton(
                         onPressed: () {
                           navController.toggleVoice();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                navController.isVoiceEnabled
-                                    ? 'voice_enabled'.tr()
-                                    : 'voice_disabled'.tr(),
-                              ),
-                              duration: const Duration(seconds: 1),
-                            ),
-                          );
                         },
                         icon: Icon(
                           navController.isVoiceEnabled
                               ? Icons.volume_up_rounded
                               : Icons.volume_off_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          navController.stopNavigation();
+                          _clearRoutePolyline();
+                        },
+                        icon: const Icon(
+                          Icons.close,
                           color: Colors.white,
                           size: 28,
                         ),
@@ -602,7 +667,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-          // 🔘 دکمه وضعیت آنلاین / آفلاین (هنگامی که مسیریابی فعال نیست)
+          // 🔘 دکمه وضعیت آنلاین / آفلاین
           if (!navController.isNavigating)
             Positioned(
               top: 24,
@@ -670,7 +735,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-          // 🧪 دکمه شناور تست حرکت و گوینده صوتی
+          // 🧪 دکمه شبیه‌سازی مسیر
           Positioned(
             bottom: 90,
             right: 20,
@@ -688,7 +753,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
 
-          // 🎯 دکمه موقعیت من (GPS)
+          // 🎯 دکمه GPS
           Positioned(
             bottom: 20,
             right: 20,
