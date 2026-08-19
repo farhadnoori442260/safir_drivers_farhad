@@ -89,7 +89,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
   }
 
-  /// 🧪 تابع شبیه‌سازی حرکت و تست راهنمای صوتی
+  /// 🧪 تابع شبیه‌سازی حرکت و تست راهنمای صوتی (اصلاح‌شده و بدون خطای عدد فاصله)
   void startSimulatedTestDrive(NavigationController navController) async {
     List<LatLng> simulatedPoints = [
       const LatLng(34.5553, 69.2075),
@@ -98,14 +98,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       const LatLng(34.5570, 69.2095),
     ];
 
-    // شروع مسیریابی و رسم خط شبیه‌سازی
-    await navController.startNavigation(
+    // شروع مسیریابی و دریافت نقاط از کنترلر
+    List<LatLng> points = await navController.startNavigation(
       simulatedPoints.first,
       simulatedPoints.last,
       context.locale.languageCode,
     );
 
-    await _drawRoutePolyline(simulatedPoints);
+    if (points.isNotEmpty) {
+      await _drawRoutePolyline(points);
+    } else {
+      await _drawRoutePolyline(simulatedPoints);
+    }
 
     List<String> instructions = [
       'continue_straight'.tr(),
@@ -126,18 +130,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
       if (!mounted) return;
 
-      _animatedMapMove(simulatedPoints[i], 17.0);
+      _animatedMapMove(simulatedPoints[i], 17.5);
 
-      String currentInstruction = instructions[i];
-      int remainingDistance = (200 - (i * 50));
-
+      // به‌روزرسانی صحیح از طریق کنترلر بدون تداخل فاصله
       navController.updateInstruction(
-        instruction: currentInstruction,
-        distance: remainingDistance > 0 ? remainingDistance : 0,
+        instruction: instructions[i],
+        distance: (150 - (i * 40)).clamp(0, 500),
         icon: icons[i],
       );
 
-      navController.speakInstruction(currentInstruction);
+      navController.speakInstruction(instructions[i]);
     }
   }
 
@@ -232,7 +234,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     positionStreamHomePage = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 3,
+        distanceFilter: 4, // افزایش کمی فاصله فیلتر برای جلوگیری از لرزش نقشه
       ),
     ).listen((Position position) {
       currentPositionOfDriver = position;
@@ -249,7 +251,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           langCode: context.locale.languageCode,
         );
 
-        // استفاده از موقعیت قفل شده روی سرک
+        // استفاده از موقعیت قفل شده روی سرک برای جلوگیری از پرش مارکر
         LatLng activeLocation = navController.snappedDriverLocation ?? rawLatLng;
 
         setState(() {
