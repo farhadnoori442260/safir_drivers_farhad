@@ -564,7 +564,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             Text(
                               navController.navigationInstruction,
                               style: const TextStyle(
-                                color: Colors.white90,
+                                color: Colors.white,
                                 fontSize: 14,
                               ),
                               maxLines: 1,
