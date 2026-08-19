@@ -431,7 +431,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             myLocationEnabled: false,
             trackCameraPosition: true,
             
-            onCameraMove: () {
+            onCameraMove: (CameraPosition position) {
               if (!isMapMoving && mounted) {
                 setState(() {
                   isMapMoving = true;
