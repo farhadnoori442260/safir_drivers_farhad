@@ -60,10 +60,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     ];
 
     List<String> instructions = [
-      'direct_200m'.tr(),
-      'turn_right_50m'.tr(),
-      'turn_left_now'.tr(),
-      'arrived_destination'.tr(),
+      'continue_straight'.tr(),
+      'voice_turn_right_now'.tr(),
+      'voice_turn_left_now'.tr(),
+      'arrived'.tr(),
     ];
 
     List<IconData> icons = [
@@ -470,7 +470,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         border: Border.all(color: Colors.white, width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withAlpha(64),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -500,7 +500,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       width: isMapMoving ? 6 : 8,
                       height: isMapMoving ? 3 : 5,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(isMapMoving ? 0.3 : 0.7),
+                        color: Colors.black.withAlpha(isMapMoving ? 76 : 178),
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
@@ -536,7 +536,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withAlpha(51),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -615,7 +615,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: (isDriverAvailable ? Colors.red.shade900 : SafirColors.primary).withOpacity(0.3),
+                          color: (isDriverAvailable ? Colors.red.shade900 : SafirColors.primary).withAlpha(76),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -681,9 +681,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               },
               backgroundColor: SafirColors.primary,
               icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-              label: const Text(
-                'تست حرکت و صدا',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              label: Text(
+                'voice_guidance'.tr(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
           ),
