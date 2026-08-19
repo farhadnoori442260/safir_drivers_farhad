@@ -81,7 +81,6 @@ class MyApp extends StatelessWidget {
               "خطا در بارگذاری برنامه:\n${details.exception}",
               style: const TextStyle(color: Colors.red, fontSize: 13),
               textAlign: TextAlign.center,
-              textDirection: TextDirection.rtl,
             ),
           ),
         ),
