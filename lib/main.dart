@@ -68,7 +68,7 @@ class MyApp extends StatelessWidget {
               // 📌 فراخوانی رنگ اصلی (سبز سفیر) از SafirColors
               colorScheme: ColorScheme.fromSeed(seedColor: SafirColors.primary),
               primaryColor: SafirColors.primary,
-              scaffoldBackgroundColor: SafirColors.background,
+              scaffoldBackgroundColor: const Color(0xFFFAFAFA),
               fontFamily: 'IranYekan',
               useMaterial3: true,
             ),
