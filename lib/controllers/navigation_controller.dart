@@ -40,6 +40,7 @@ class NavigationController extends ChangeNotifier {
   bool _isVoiceEnabled = true;
 
   List<StepInstruction> _steps = [];
+  List<LatLng> routePoints = []; // 📌 ذخیره نقاط خط مسیر برای کشیدن روی سرک
   int _currentStepIndex = 0;
 
   String currentStreet = '';
@@ -50,15 +51,16 @@ class NavigationController extends ChangeNotifier {
   String _currentInstruction = '';
   IconData _currentTurnIcon = Icons.straight;
 
+  LatLng? snappedDriverLocation; // 📌 موقعیت قفل‌شده راننده روی خیابان
+
   final Set<int> _spokenSteps = {};
 
-  // 📌 Getters مورد نیاز HomePage
+  // 📌 Getters
   bool get isVoiceEnabled => _isVoiceEnabled;
   int get distanceToNextTurn => distanceToNextStep.toInt();
   String get navigationInstruction => _currentInstruction.isNotEmpty ? _currentInstruction : currentStreet;
   IconData get currentTurnIcon => _currentTurnIcon;
 
-  /// 🔊 قطع و وصل صدای گوینده
   void toggleVoice() {
     _isVoiceEnabled = !_isVoiceEnabled;
     if (!_isVoiceEnabled) {
@@ -67,14 +69,12 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 🔊 پخش دستی یا شبیه‌سازی شده دستور صوتی
   void speakInstruction(String text) {
     if (_isVoiceEnabled) {
       VoiceGuidanceHelper.speakStep('straight', text, 0, _activeLangCode);
     }
   }
 
-  /// 📝 بروزرسانی دستورات صوتی و آیکون (مخصوص تست شبیه‌سازی)
   void updateInstruction({
     required String instruction,
     required int distance,
@@ -86,7 +86,6 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 🚀 شروع ساده مسیریابی (جهت تست شبیه‌سازی در HomePage)
   void startNavigationSimulated() {
     isNavigating = true;
     _currentStepIndex = 0;
@@ -94,16 +93,17 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 🚀 دریافت مسیر اصلی از OSRM و شروع مسیریابی
-  Future<void> startNavigation([LatLng? start, LatLng? destination, String langCode = 'fa']) async {
+  /// 🚀 دریافت مسیر اصلی از OSRM و خروجی دادن لیست نقاط برای رسم خط روی نقشه
+  Future<List<LatLng>> startNavigation([LatLng? start, LatLng? destination, String langCode = 'fa']) async {
     isNavigating = true;
     _activeLangCode = langCode;
     _steps.clear();
+    routePoints.clear();
     _currentStepIndex = 0;
     _spokenSteps.clear();
     notifyListeners();
 
-    if (start == null || destination == null) return;
+    if (start == null || destination == null) return [];
 
     final url = Uri.parse(
       'https://router.project-osrm.org/route/v1/driving/'
@@ -118,6 +118,10 @@ class NavigationController extends ChangeNotifier {
         final routes = data['routes'] as List;
 
         if (routes.isNotEmpty) {
+          // 📌 استخراج نقاط خط مسیر جهت رسم خط رنگی روی خیابان
+          final geometry = routes[0]['geometry']['coordinates'] as List;
+          routePoints = geometry.map((pt) => LatLng(pt[1], pt[0])).toList();
+
           final legs = routes[0]['legs'] as List;
           final stepsJson = legs[0]['steps'] as List;
 
@@ -136,9 +140,12 @@ class NavigationController extends ChangeNotifier {
     } catch (e) {
       debugPrint('osrm_error_fetch'.tr(args: [e.toString()]));
     }
+
+    notifyListeners();
+    return routePoints; // 📌 بازگرداندن نقاط خط مسیر به HomePage
   }
 
-  /// 📍 بروزرسانی موقعیت راننده و بررسی فاصله تا مانور بعدی
+  /// 📍 بروزرسانی موقعیت راننده با قفل شدن روی نزدیک‌ترین نقطه خیابان
   void updateDriverPosition(LatLng driverLatLng, {String? langCode}) {
     if (!isNavigating || _steps.isEmpty || _currentStepIndex >= _steps.length) return;
 
@@ -146,11 +153,14 @@ class NavigationController extends ChangeNotifier {
       _activeLangCode = langCode;
     }
 
+    // 📌 قفل کردن موقعیت راننده روی خط خیابان
+    snappedDriverLocation = _getSnappedLocation(driverLatLng);
+
     final currentStep = _steps[_currentStepIndex];
 
     double distance = Geolocator.distanceBetween(
-      driverLatLng.latitude,
-      driverLatLng.longitude,
+      snappedDriverLocation!.latitude,
+      snappedDriverLocation!.longitude,
       currentStep.location.latitude,
       currentStep.location.longitude,
     );
@@ -177,6 +187,35 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 📌 متد محاسبه و قفل کردن موقعیت خام GPS روی خط خیابان
+  LatLng _getSnappedLocation(LatLng rawLocation) {
+    if (routePoints.isEmpty) return rawLocation;
+
+    LatLng closestPoint = routePoints.first;
+    double minDistance = Geolocator.distanceBetween(
+      rawLocation.latitude,
+      rawLocation.longitude,
+      closestPoint.latitude,
+      closestPoint.longitude,
+    );
+
+    for (var point in routePoints) {
+      double d = Geolocator.distanceBetween(
+        rawLocation.latitude,
+        rawLocation.longitude,
+        point.latitude,
+        point.longitude,
+      );
+      if (d < minDistance) {
+        minDistance = d;
+        closestPoint = point;
+      }
+    }
+
+    // اگر انحراف GPS کمتر از ۳۵ متر باشد، موقعیت روی خط خیابان قفل می‌شود
+    return minDistance < 35 ? closestPoint : rawLocation;
+  }
+
   void _updateCurrentStepInfo() {
     if (_currentStepIndex < _steps.length) {
       final step = _steps[_currentStepIndex];
@@ -201,12 +240,13 @@ class NavigationController extends ChangeNotifier {
     }
   }
 
-  /// 🛑 متوقف کردن مسیریابی
   void stopNavigation() {
     isNavigating = false;
     _steps.clear();
+    routePoints.clear();
     _currentStepIndex = 0;
     _spokenSteps.clear();
+    snappedDriverLocation = null;
     VoiceGuidanceHelper.stop();
     notifyListeners();
   }
