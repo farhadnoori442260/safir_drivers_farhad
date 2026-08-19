@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -5,34 +6,63 @@ import 'package:easy_localization/easy_localization.dart';
 class VoiceGuidanceHelper {
   static final FlutterTts _flutterTts = FlutterTts();
   static bool isMuted = false;
+  static bool _isInitialized = false;
 
-  /// مقداردهی اولیه سیستم صوتی
+  /// مقداردهی اولیه و تنظیمات اسپیکر
   static Future<void> initTts(String languageCode) async {
-    String lang = 'fa-IR';
-    if (languageCode == 'ps') {
-      lang = 'ps-AF';
-    } else if (languageCode == 'en') {
-      lang = 'en-US';
-    }
-
     try {
-      await _flutterTts.setLanguage(lang);
-      await _flutterTts.setSpeechRate(0.5); // سرعت گفتار
-      await _flutterTts.setVolume(1.0);     // میزان صدا
-      await _flutterTts.setPitch(1.0);      // لحن صدا
+      // 📌 تنظیم صدا روی اسپیکر اصلی دستگاه
+      if (Platform.isIOS) {
+        await _flutterTts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+            IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          ],
+        );
+      } else if (Platform.isAndroid) {
+        await _flutterTts.setQueueMode(1); // لغو صدای قبلی و پخش صدای جدید
+      }
+
+      String primaryLang = 'fa-IR';
+      if (languageCode == 'ps') {
+        primaryLang = 'ps-AF';
+      } else if (languageCode == 'en') {
+        primaryLang = 'en-US';
+      }
+
+      // 📌 بررسی اینکه آیا زبان مورد نظر در موتور گوینده گوشی موجود است یا خیر
+      bool isAvailable = await _flutterTts.isLanguageAvailable(primaryLang);
+
+      if (isAvailable) {
+        await _flutterTts.setLanguage(primaryLang);
+      } else {
+        // اگر فارسی/پشتو روی موتور TTS گوشی نصب نبود، به انگلیسی سوییچ می‌کند تا کلاً بی‌صدا نماند
+        debugPrint("TTS Language $primaryLang not available. Falling back to en-US.");
+        await _flutterTts.setLanguage('en-US');
+      }
+
+      await _flutterTts.setSpeechRate(0.45); // سرعت گفتار مناسب مسیریابی
+      await _flutterTts.setVolume(1.0);      // حداکثر میزان صدا
+      await _flutterTts.setPitch(1.0);       // لحن طبیعی
+      _isInitialized = true;
     } catch (e) {
       debugPrint("Error initializing TTS: $e");
     }
   }
 
-  /// پخش پیام صوتی
+  /// پخش مستقیم متن صوتی
   static Future<void> speak(String text) async {
     if (isMuted || text.isEmpty) return;
-    await _flutterTts.stop();
-    await _flutterTts.speak(text);
+    try {
+      await _flutterTts.stop();
+      await _flutterTts.speak(text);
+    } catch (e) {
+      debugPrint("Error in speak: $e");
+    }
   }
 
-  /// تبدیل داده‌های مسیریابی به جملات صوتی واقعی بر پایه easy_localization
+  /// تبدیل داده‌های مسیریابی به جملات صوتی
   static Future<void> speakStep(
     String modifier,
     String streetName,
@@ -41,7 +71,9 @@ class VoiceGuidanceHelper {
   ) async {
     if (isMuted) return;
 
-    await initTts(langCode);
+    if (!_isInitialized) {
+      await initTts(langCode);
+    }
 
     String speechMessage = '';
 
