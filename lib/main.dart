@@ -4,7 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-import 'package:safir_drivers/constants/app_colors.dart'; // 📌 اتصال به پالت رنگی اصلی سفیر
+import 'package:safir_drivers/utils/app_colors.dart'; // 📌 اتصال به پالت رنگی اصلی سفیر
 import 'package:safir_drivers/pages/splash_screen.dart';
 import 'package:safir_drivers/providers/authentication_provider.dart';
 import 'package:safir_drivers/providers/dashboard_provider.dart';
