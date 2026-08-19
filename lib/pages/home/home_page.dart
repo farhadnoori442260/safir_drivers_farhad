@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:easy_localization/easy_localization.dart';
 
-import 'package:safir_drivers/constants/app_colors.dart'; // 📌 اتصال به پالت اصلی
+import 'package:safir_drivers/utils/app_colors.dart'; // 📌 اتصال به پالت اصلی
 import 'package:safir_drivers/controllers/navigation_controller.dart'; // 📌 اتصال به کنترلر مسیریابی و صوتی
 import 'package:safir_drivers/providers/registration_provider.dart'; 
 import '../../push_notifications/push_notification_system.dart';
