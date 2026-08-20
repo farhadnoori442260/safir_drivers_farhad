@@ -190,6 +190,68 @@ class NavigationController extends ChangeNotifier {
 
     notifyListeners();
   }
+  double _getDistanceFromRoute(LatLng rawLocation) {
+    if (routePoints.isEmpty) return 0.0;
+
+    double minDistance = double.infinity;
+
+    for (var point in routePoints) {
+      final distance = Geolocator.distanceBetween(
+        rawLocation.latitude,
+        rawLocation.longitude,
+        point.latitude,
+        point.longitude,
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    return minDistance;
+  }
+  Future<void> _rerouteFromCurrentLocation(LatLng from) async {
+    if (activeDestination == null || isRerouting) return;
+
+    isRerouting = true;
+
+    final url = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/'
+      '${from.longitude},${from.latitude};'
+      '${activeDestination!.longitude},${activeDestination!.latitude}'
+      '?overview=full&steps=true&geometries=geojson',
+    );
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final routes = data['routes'] as List;
+
+        if (routes.isNotEmpty) {
+          final geometry = routes[0]['geometry']['coordinates'] as List;
+          routePoints = geometry.map((pt) => LatLng(pt[1], pt[0])).toList();
+
+          final legs = routes[0]['legs'] as List;
+          final stepsJson = legs[0]['steps'] as List;
+
+          _steps = stepsJson.map((s) => StepInstruction.fromJson(s)).toList();
+          _currentStepIndex = 0;
+          _spokenSteps.clear();
+
+          if (_steps.isNotEmpty) {
+            _updateCurrentStepInfo();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Reroute error: $e');
+    }
+
+    isRerouting = false;
+    notifyListeners();
+  }
 
   /// 📌 متد محاسبه و قفل کردن موقعیت خام GPS روی خط خیابان
   LatLng _getSnappedLocation(LatLng rawLocation) {
