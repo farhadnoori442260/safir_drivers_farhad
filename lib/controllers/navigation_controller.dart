@@ -1,10 +1,12 @@
 import 'dart:convert';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:easy_localization/easy_localization.dart';
+
 import '../helpers/voice_guidance_helper.dart';
 
 class StepInstruction {
@@ -23,60 +25,72 @@ class StepInstruction {
   });
 
   factory StepInstruction.fromJson(Map<String, dynamic> json) {
-    final maneuver = json['maneuver'];
-    final locationList = maneuver['location'];
+    final maneuver = json['maneuver'] as Map<String, dynamic>? ?? {};
+    final locationList = maneuver['location'] as List? ?? [0.0, 0.0];
+
     return StepInstruction(
-      instruction: maneuver['type'] ?? 'straight',
-      streetName: json['name'] ?? '',
-      modifier: maneuver['modifier'] ?? 'straight',
-      location: LatLng(locationList[1], locationList[0]),
-      distance: (json['distance'] as num).toDouble(),
+      instruction: maneuver['type']?.toString() ?? 'straight',
+      streetName: json['name']?.toString() ?? '',
+      modifier: maneuver['modifier']?.toString() ?? 'straight',
+      location: LatLng(
+        (locationList[1] as num).toDouble(),
+        (locationList[0] as num).toDouble(),
+      ),
+      distance: (json['distance'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
 
 class NavigationController extends ChangeNotifier {
   int routeVersion = 0;
-    LatLng? activeDestination;
+
+  LatLng? activeDestination;
+  LatLng? snappedDriverLocation;
+
   bool isRerouting = false;
-  double distanceFromRoute = 0.0;
   bool isNavigating = false;
   bool _isVoiceEnabled = true;
 
-  List<StepInstruction> _steps = [];
-  List<LatLng> routePoints = []; // 📌 ذخیره نقاط خط مسیر برای کشیدن روی سرک
-  List<LatLng> get currentRoutePoints => routePoints;
+  double distanceFromRoute = 0.0;
+  double distanceToNextStep = 0.0;
+
+  final List<StepInstruction> _steps = [];
+  final List<LatLng> routePoints = [];
+  final Set<int> _spokenSteps = {};
+
   int _currentStepIndex = 0;
+  String _activeLangCode = 'fa';
 
   String currentStreet = '';
   String currentModifier = 'straight';
-  double distanceToNextStep = 0.0;
-  String _activeLangCode = 'fa';
-
   String _currentInstruction = '';
   IconData _currentTurnIcon = Icons.straight;
 
-  LatLng? snappedDriverLocation; // 📌 موقعیت قفل‌شده راننده روی خیابان
-
-  final Set<int> _spokenSteps = {};
-
-  // 📌 Getters
   bool get isVoiceEnabled => _isVoiceEnabled;
-  int get distanceToNextTurn => distanceToNextStep.toInt();
-  String get navigationInstruction => _currentInstruction.isNotEmpty ? _currentInstruction : currentStreet;
+  int get distanceToNextTurn => distanceToNextStep.ceil();
+  String get navigationInstruction =>
+      _currentInstruction.isNotEmpty ? _currentInstruction : currentStreet;
   IconData get currentTurnIcon => _currentTurnIcon;
+  List<LatLng> get currentRoutePoints => List.unmodifiable(routePoints);
 
   void toggleVoice() {
     _isVoiceEnabled = !_isVoiceEnabled;
+
     if (!_isVoiceEnabled) {
       VoiceGuidanceHelper.stop();
     }
+
     notifyListeners();
   }
 
   void speakInstruction(String text) {
     if (_isVoiceEnabled) {
-      VoiceGuidanceHelper.speakStep('straight', text, 0, _activeLangCode);
+      VoiceGuidanceHelper.speakStep(
+        'straight',
+        text,
+        0,
+        _activeLangCode,
+      );
     }
   }
 
@@ -98,73 +112,75 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 🚀 دریافت مسیر اصلی از OSRM و خروجی دادن لیست نقاط برای رسم خط روی نقشه
-  Future<List<LatLng>> startNavigation([LatLng? start, LatLng? destination, String langCode = 'fa']) async {
-    isNavigating = true;
-    _activeLangCode = langCode;
-    _steps.clear();
-    routePoints.clear();
-    _currentStepIndex = 0;
-    _spokenSteps.clear();
-    notifyListeners();
+  Future<List<LatLng>> startNavigation([
+    LatLng? start,
+    LatLng? destination,
+    String langCode = 'fa',
+  ]) async {
+    if (start == null || destination == null) {
+      return [];
+    }
 
-    if (start == null || destination == null) return [];
+    isNavigating = true;
+    isRerouting = false;
+    _activeLangCode = langCode;
     activeDestination = destination;
 
-    final url = Uri.parse(
-      'https://router.project-osrm.org/route/v1/driving/'
-      '${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}'
-      '?overview=full&steps=true&geometries=geojson',
+    _steps.clear();
+    routePoints.clear();
+    _spokenSteps.clear();
+    _currentStepIndex = 0;
+    distanceToNextStep = 0.0;
+    distanceFromRoute = 0.0;
+
+    notifyListeners();
+
+    final route = await _fetchRoute(
+      start: start,
+      destination: destination,
     );
 
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final routes = data['routes'] as List;
+    if (route == null) {
+      notifyListeners();
+      return [];
+    }
 
-        if (routes.isNotEmpty) {
-          // 📌 استخراج نقاط خط مسیر جهت رسم خط رنگی روی خیابان
-          final geometry = routes[0]['geometry']['coordinates'] as List;
-          routePoints = geometry.map((pt) => LatLng(pt[1], pt[0])).toList();
+    _applyRoute(route);
 
-          final legs = routes[0]['legs'] as List;
-          final stepsJson = legs[0]['steps'] as List;
-
-          _steps = stepsJson.map((s) => StepInstruction.fromJson(s)).toList();
-
-          if (_steps.isNotEmpty) {
-            _updateCurrentStepInfo();
-            if (_isVoiceEnabled) {
-              VoiceGuidanceHelper.speakStep('straight', _steps[0].streetName, 0, _activeLangCode);
-            }
-          }
-        }
-      } else {
-        debugPrint('osrm_error_status'.tr(args: [response.statusCode.toString()]));
-      }
-    } catch (e) {
-      debugPrint('osrm_error_fetch'.tr(args: [e.toString()]));
+    if (_steps.isNotEmpty && _isVoiceEnabled) {
+      VoiceGuidanceHelper.speakStep(
+        'straight',
+        _steps.first.streetName,
+        0,
+        _activeLangCode,
+      );
     }
 
     notifyListeners();
-    return routePoints; // 📌 بازگرداندن نقاط خط مسیر به HomePage
+    return List.unmodifiable(routePoints);
   }
 
-  /// 📍 بروزرسانی موقعیت راننده با قفل شدن روی نزدیک‌ترین نقطه خیابان
-  void updateDriverPosition(LatLng driverLatLng, {String? langCode}) {
-    if (!isNavigating || _steps.isEmpty || _currentStepIndex >= _steps.length) return;
+  void updateDriverPosition(
+    LatLng driverLatLng, {
+    String? langCode,
+  }) {
+    if (!isNavigating || routePoints.isEmpty) return;
 
     if (langCode != null) {
       _activeLangCode = langCode;
     }
 
-    // 📌 قفل کردن موقعیت راننده روی خط خیابان
+    distanceFromRoute = _getDistanceFromRoute(driverLatLng);
     snappedDriverLocation = _getSnappedLocation(driverLatLng);
+
+    if (_steps.isEmpty || _currentStepIndex >= _steps.length) {
+      notifyListeners();
+      return;
+    }
 
     final currentStep = _steps[_currentStepIndex];
 
-    double distance = Geolocator.distanceBetween(
+    final distance = Geolocator.distanceBetween(
       snappedDriverLocation!.latitude,
       snappedDriverLocation!.longitude,
       currentStep.location.latitude,
@@ -175,6 +191,7 @@ class NavigationController extends ChangeNotifier {
 
     if (distance <= 50 && !_spokenSteps.contains(_currentStepIndex)) {
       _spokenSteps.add(_currentStepIndex);
+
       if (_isVoiceEnabled) {
         VoiceGuidanceHelper.speakStep(
           currentStep.modifier,
@@ -189,19 +206,116 @@ class NavigationController extends ChangeNotifier {
       _currentStepIndex++;
       _updateCurrentStepInfo();
     }
-    distanceFromRoute = _getDistanceFromRoute(driverLatLng);
 
     if (distanceFromRoute > 45 && !isRerouting) {
       _rerouteFromCurrentLocation(driverLatLng);
     }
+
     notifyListeners();
   }
+
+  Future<Map<String, dynamic>?> _fetchRoute({
+    required LatLng start,
+    required LatLng destination,
+  }) async {
+    final url = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/'
+      '${start.longitude},${start.latitude};'
+      '${destination.longitude},${destination.latitude}'
+      '?overview=full&steps=true&geometries=geojson',
+    );
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode != 200) {
+        debugPrint(
+          'osrm_error_status'.tr(args: [response.statusCode.toString()]),
+        );
+        return null;
+      }
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final routes = data['routes'] as List?;
+
+      if (routes == null || routes.isEmpty) {
+        return null;
+      }
+
+      return routes.first as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('osrm_error_fetch'.tr(args: [e.toString()]));
+      return null;
+    }
+  }
+
+  void _applyRoute(Map<String, dynamic> route) {
+    final geometry = route['geometry'] as Map<String, dynamic>?;
+    final coordinates = geometry?['coordinates'] as List? ?? [];
+
+    routePoints
+      ..clear()
+      ..addAll(
+        coordinates.map(
+          (point) {
+            final values = point as List;
+            return LatLng(
+              (values[1] as num).toDouble(),
+              (values[0] as num).toDouble(),
+            );
+          },
+        ),
+      );
+
+    final legs = route['legs'] as List? ?? [];
+    final firstLeg = legs.isNotEmpty ? legs.first as Map<String, dynamic> : {};
+    final stepsJson = firstLeg['steps'] as List? ?? [];
+
+    _steps
+      ..clear()
+      ..addAll(
+        stepsJson.map(
+          (step) => StepInstruction.fromJson(
+            step as Map<String, dynamic>,
+          ),
+        ),
+      );
+
+    _currentStepIndex = 0;
+    _spokenSteps.clear();
+
+    if (_steps.isNotEmpty) {
+      _updateCurrentStepInfo(notify: false);
+    }
+
+    routeVersion++;
+  }
+
+  Future<void> _rerouteFromCurrentLocation(LatLng from) async {
+    if (activeDestination == null || isRerouting) return;
+
+    isRerouting = true;
+    notifyListeners();
+
+    final route = await _fetchRoute(
+      start: from,
+      destination: activeDestination!,
+    );
+
+    if (route != null && isNavigating) {
+      _applyRoute(route);
+    }
+
+    isRerouting = false;
+    notifyListeners();
+  }
+
   double _getDistanceFromRoute(LatLng rawLocation) {
     if (routePoints.isEmpty) return 0.0;
 
-    double minDistance = double.infinity;
+    var minDistance = double.infinity;
 
-    for (var point in routePoints) {
+    for (final point in routePoints) {
       final distance = Geolocator.distanceBetween(
         rawLocation.latitude,
         rawLocation.longitude,
@@ -216,87 +330,66 @@ class NavigationController extends ChangeNotifier {
 
     return minDistance;
   }
-  Future<void> _rerouteFromCurrentLocation(LatLng from) async {
-    if (activeDestination == null || isRerouting) return;
 
-    isRerouting = true;
-
-    final url = Uri.parse(
-      'https://router.project-osrm.org/route/v1/driving/'
-      '${from.longitude},${from.latitude};'
-      '${activeDestination!.longitude},${activeDestination!.latitude}'
-      '?overview=full&steps=true&geometries=geojson',
-    );
-
-    try {
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final routes = data['routes'] as List;
-
-        if (routes.isNotEmpty) {
-          final geometry = routes[0]['geometry']['coordinates'] as List;
-          routePoints = geometry.map((pt) => LatLng(pt[1], pt[0])).toList();
-          routeVersion++;
-
-          final legs = routes[0]['legs'] as List;
-          final stepsJson = legs[0]['steps'] as List;
-
-          _steps = stepsJson.map((s) => StepInstruction.fromJson(s)).toList();
-          _currentStepIndex = 0;
-          _spokenSteps.clear();
-
-          if (_steps.isNotEmpty) {
-            _updateCurrentStepInfo();
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Reroute error: $e');
-    }
-
-    isRerouting = false;
-    notifyListeners();
-  }
-
-  /// 📌 متد محاسبه و قفل کردن موقعیت خام GPS روی خط خیابان
   LatLng _getSnappedLocation(LatLng rawLocation) {
     if (routePoints.isEmpty) return rawLocation;
 
-    LatLng closestPoint = routePoints.first;
-    double minDistance = Geolocator.distanceBetween(
+    var closestPoint = routePoints.first;
+    var minDistance = Geolocator.distanceBetween(
       rawLocation.latitude,
       rawLocation.longitude,
       closestPoint.latitude,
       closestPoint.longitude,
     );
 
-    for (var point in routePoints) {
-      double d = Geolocator.distanceBetween(
+    for (final point in routePoints) {
+      final distance = Geolocator.distanceBetween(
         rawLocation.latitude,
         rawLocation.longitude,
         point.latitude,
         point.longitude,
       );
-      if (d < minDistance) {
-        minDistance = d;
+
+      if (distance < minDistance) {
+        minDistance = distance;
         closestPoint = point;
       }
     }
 
-    // اگر انحراف GPS کمتر از ۳۵ متر باشد، موقعیت روی خط خیابان قفل می‌شود
-    return minDistance < 35 ? closestPoint : rawLocation;
+    return minDistance <= 35 ? closestPoint : rawLocation;
   }
 
-  void _updateCurrentStepInfo() {
-    if (_currentStepIndex < _steps.length) {
-      final step = _steps[_currentStepIndex];
-      currentStreet = step.streetName;
-      currentModifier = step.modifier;
-      _currentInstruction = step.streetName;
-      _currentTurnIcon = _getIconFromModifier(step.modifier);
+  void _updateCurrentStepInfo({bool notify = true}) {
+    if (_currentStepIndex >= _steps.length) return;
+
+    final step = _steps[_currentStepIndex];
+
+    currentStreet = step.streetName;
+    currentModifier = step.modifier;
+
+    _currentInstruction = step.streetName.isNotEmpty
+        ? step.streetName
+        : _instructionFromModifier(step.modifier);
+
+    _currentTurnIcon = _getIconFromModifier(step.modifier);
+
+    if (notify) {
       notifyListeners();
+    }
+  }
+
+  String _instructionFromModifier(String modifier) {
+    switch (modifier) {
+      case 'right':
+      case 'slight right':
+        return 'به راست بپیچید';
+      case 'left':
+      case 'slight left':
+        return 'به چپ بپیچید';
+      case 'uturn':
+        return 'دور بزنید';
+      default:
+        return 'مستقیم بروید';
     }
   }
 
@@ -308,6 +401,8 @@ class NavigationController extends ChangeNotifier {
       case 'left':
       case 'slight left':
         return Icons.turn_left;
+      case 'uturn':
+        return Icons.u_turn_left;
       default:
         return Icons.straight;
     }
@@ -315,11 +410,23 @@ class NavigationController extends ChangeNotifier {
 
   void stopNavigation() {
     isNavigating = false;
+    isRerouting = false;
+
     _steps.clear();
     routePoints.clear();
-    _currentStepIndex = 0;
     _spokenSteps.clear();
+
+    _currentStepIndex = 0;
+    activeDestination = null;
     snappedDriverLocation = null;
+
+    distanceFromRoute = 0.0;
+    distanceToNextStep = 0.0;
+    currentStreet = '';
+    currentModifier = 'straight';
+    _currentInstruction = '';
+    _currentTurnIcon = Icons.straight;
+
     VoiceGuidanceHelper.stop();
     notifyListeners();
   }
