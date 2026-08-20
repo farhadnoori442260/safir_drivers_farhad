@@ -36,6 +36,7 @@ class StepInstruction {
 }
 
 class NavigationController extends ChangeNotifier {
+  int routeVersion = 0;
     LatLng? activeDestination;
   bool isRerouting = false;
   double distanceFromRoute = 0.0;
@@ -236,6 +237,7 @@ class NavigationController extends ChangeNotifier {
         if (routes.isNotEmpty) {
           final geometry = routes[0]['geometry']['coordinates'] as List;
           routePoints = geometry.map((pt) => LatLng(pt[1], pt[0])).toList();
+          routeVersion++;
 
           final legs = routes[0]['legs'] as List;
           final stepsJson = legs[0]['steps'] as List;
