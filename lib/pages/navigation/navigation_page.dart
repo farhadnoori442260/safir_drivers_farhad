@@ -100,8 +100,6 @@ class _NavigationPageState extends State<NavigationPage> {
         lineColor: '#1B7A57',
         lineWidth: 6.0,
         lineOpacity: 0.85,
-        lineCap: 'round',
-        lineJoin: 'round',
       ),
     );
   }
