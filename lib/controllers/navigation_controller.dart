@@ -45,6 +45,7 @@ class NavigationController extends ChangeNotifier {
 
   List<StepInstruction> _steps = [];
   List<LatLng> routePoints = []; // 📌 ذخیره نقاط خط مسیر برای کشیدن روی سرک
+  List<LatLng> get currentRoutePoints => routePoints;
   int _currentStepIndex = 0;
 
   String currentStreet = '';
