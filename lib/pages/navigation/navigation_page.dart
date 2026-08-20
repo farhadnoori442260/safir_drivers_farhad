@@ -194,6 +194,24 @@ class _NavigationPageState extends State<NavigationPage> {
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
+                    Consumer<NavigationController>(
+            builder: (context, controller, child) {
+              if (!controller.isNavigating) {
+                return const SizedBox.shrink();
+              }
+
+              return const Align(
+                alignment: Alignment.center,
+                child: IgnorePointer(
+                  child: Icon(
+                    Icons.navigation,
+                    color: SafirColors.primary,
+                    size: 48,
+                  ),
+                ),
+              );
+            },
+          ),
 
           Consumer<NavigationController>(
             builder: (context, controller, child) {
