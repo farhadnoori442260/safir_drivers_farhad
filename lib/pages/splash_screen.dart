@@ -1,13 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:easy_localization/easy_localization.dart';
 
-import 'package:safir_drivers/utils/app_colors.dart'; // 📌 اتصال به پالت رنگی اصلی
 import 'package:safir_drivers/pages/auth/register_screen.dart';
 import 'package:safir_drivers/pages/dashboard.dart';
 import 'package:safir_drivers/providers/authentication_provider.dart';
 import 'package:safir_drivers/widgets/blocked_screen.dart';
+
+const Color safirColor = Color(0xFF145A41);
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -21,8 +21,9 @@ class _SplashScreenState extends State<SplashScreen> {
   bool _hasError = false;
   Widget? _targetScreen;
 
-  // 🟢 تغییر به false برای اجرا و بررسی واقعی فرآیند ثبت‌نام راننده
-  static const bool isDebugMode = false;
+  // 🔴 کلید حالت تست: وقتی روی true باشد، ثبت نام را کلا دور میزند و مستقیم میرود روی داشبورد/نقشه
+  // 🟢 وقتی خواستی خروجی اصلی برای مشتری بگیری این را false کن
+  static const bool isDebugMode = true;
 
   @override
   void initState() {
@@ -36,8 +37,9 @@ class _SplashScreenState extends State<SplashScreen> {
       _hasError = false;
     });
 
+    // ⚡ اگر در حال تست و توسعه هستی، مستقیما برو به Dashboard
     if (isDebugMode) {
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 500)); // مکث کوتاه برای نمایش لوگو
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -125,7 +127,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     if (_hasError) {
       return Scaffold(
-        backgroundColor: SafirColors.primary, // 📌 اتصال به پالت رنگی
+        backgroundColor: safirColor,
         body: SafeArea(
           child: Stack(
             children: [
@@ -139,14 +141,14 @@ class _SplashScreenState extends State<SplashScreen> {
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 32),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 40.0),
                       child: Text(
-                        'server_connection_error'.tr(), // 📌 اتصال به ترجمه
+                        'ارتباط با سرور برقرار نشد. لطفاً اینترنت خود را بررسی کنید.',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
-                          color: SafirColors.buttonTextColor,
+                          color: Colors.white,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -164,18 +166,18 @@ class _SplashScreenState extends State<SplashScreen> {
                     child: ElevatedButton(
                       onPressed: _checkAuthAndNavigation,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: SafirColors.buttonTextColor,
+                        backgroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: Text(
-                        'retry'.tr(), // 📌 اتصال به ترجمه
-                        style: const TextStyle(
+                      child: const Text(
+                        'تلاش دوباره',
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
-                          color: SafirColors.primary,
+                          color: safirColor,
                         ),
                       ),
                     ),
@@ -190,7 +192,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (_isLoading || _targetScreen == null) {
       return Scaffold(
-        backgroundColor: SafirColors.primary, // 📌 اتصال به پالت رنگی
+        backgroundColor: safirColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -202,7 +204,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 32),
               const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(SafirColors.buttonTextColor),
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 strokeWidth: 3,
               ),
             ],
