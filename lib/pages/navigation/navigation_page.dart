@@ -23,16 +23,25 @@ class NavigationPage extends StatefulWidget {
 class _NavigationPageState extends State<NavigationPage> {
   MapLibreMapController? mapController;
 
-  @override
-  void initState() {
-    super.initState();
+  bool _mapStyleReady = false;
+  bool _navigationStarted = false;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startNavigation();
-    });
+  void _onMapCreated(MapLibreMapController controller) {
+    mapController = controller;
+  }
+
+  Future<void> _onStyleLoaded() async {
+    _mapStyleReady = true;
+    await _startNavigation();
   }
 
   Future<void> _startNavigation() async {
+    if (!_mapStyleReady || _navigationStarted || mapController == null) {
+      return;
+    }
+
+    _navigationStarted = true;
+
     final controller =
         Provider.of<NavigationController>(context, listen: false);
 
@@ -42,7 +51,10 @@ class _NavigationPageState extends State<NavigationPage> {
       context.locale.languageCode,
     );
 
-    if (!mounted || mapController == null || points.isEmpty) return;
+    if (!mounted || mapController == null || points.isEmpty) {
+      _navigationStarted = false;
+      return;
+    }
 
     await mapController!.clearLines();
 
@@ -50,8 +62,17 @@ class _NavigationPageState extends State<NavigationPage> {
       LineOptions(
         geometry: points,
         lineColor: '#1B7A57',
-        lineWidth: 6,
+        lineWidth: 6.0,
         lineOpacity: 0.85,
+      ),
+    );
+
+    await mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: widget.start,
+          zoom: 16.5,
+        ),
       ),
     );
   }
@@ -77,15 +98,15 @@ class _NavigationPageState extends State<NavigationPage> {
       body: Stack(
         children: [
           MapLibreMap(
-            onMapCreated: (controller) {
-              mapController = controller;
-            },
+            onMapCreated: _onMapCreated,
+            onStyleLoadedCallback: _onStyleLoaded,
             styleString: 'assets/map/style.json',
             initialCameraPosition: CameraPosition(
               target: widget.start,
-              zoom: 16,
+              zoom: 16.0,
             ),
             myLocationEnabled: false,
+            trackCameraPosition: true,
           ),
 
           Consumer<NavigationController>(
