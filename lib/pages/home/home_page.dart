@@ -481,6 +481,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       },
     );
   }
+    void openNavigationTest() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NavigationPage(
+          start: currentLatLng,
+          destination: const LatLng(34.5650, 69.2200),
+        ),
+      ),
+    );
+    }
 
   @override
   Widget build(BuildContext context) {
