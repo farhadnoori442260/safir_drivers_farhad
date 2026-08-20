@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 
@@ -22,6 +25,8 @@ class NavigationPage extends StatefulWidget {
 
 class _NavigationPageState extends State<NavigationPage> {
   MapLibreMapController? mapController;
+  StreamSubscription<Position>? _positionStream;
+  Symbol? _driverSymbol;
 
   bool _mapStyleReady = false;
   bool _navigationStarted = false;
@@ -32,7 +37,9 @@ class _NavigationPageState extends State<NavigationPage> {
 
   Future<void> _onStyleLoaded() async {
     _mapStyleReady = true;
+
     await _startNavigation();
+    await _startLiveDriverTracking();
   }
 
   Future<void> _startNavigation() async {
@@ -71,13 +78,84 @@ class _NavigationPageState extends State<NavigationPage> {
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: widget.start,
-          zoom: 16.5,
+          zoom: 17.0,
+          tilt: 45.0,
         ),
       ),
     );
   }
 
+  Future<void> _startLiveDriverTracking() async {
+    if (!_mapStyleReady || mapController == null) return;
+
+    _positionStream?.cancel();
+
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 3,
+      ),
+    ).listen((Position position) async {
+      if (!mounted || mapController == null) return;
+
+      final rawLocation = LatLng(
+        position.latitude,
+        position.longitude,
+      );
+
+      final navController =
+          Provider.of<NavigationController>(context, listen: false);
+
+      navController.updateDriverPosition(
+        rawLocation,
+        langCode: context.locale.languageCode,
+      );
+
+      final driverLocation =
+          navController.snappedDriverLocation ?? rawLocation;
+
+      final heading = position.heading.isFinite && position.heading >= 0
+          ? position.heading
+          : 0.0;
+
+      if (_driverSymbol == null) {
+        _driverSymbol = await mapController!.addSymbol(
+          SymbolOptions(
+            geometry: driverLocation,
+            iconImage: 'marker-15',
+            iconSize: 2.0,
+            iconColor: '#1B7A57',
+            iconRotate: heading,
+            iconRotationAlignment: 'map',
+          ),
+        );
+      } else {
+        await mapController!.updateSymbol(
+          _driverSymbol!,
+          SymbolOptions(
+            geometry: driverLocation,
+            iconRotate: heading,
+            iconRotationAlignment: 'map',
+          ),
+        );
+      }
+
+      await mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: driverLocation,
+            zoom: 17.5,
+            bearing: heading,
+            tilt: 45.0,
+          ),
+        ),
+      );
+    });
+  }
+
   Future<void> _stopNavigation() async {
+    _positionStream?.cancel();
+
     final controller =
         Provider.of<NavigationController>(context, listen: false);
 
@@ -85,11 +163,21 @@ class _NavigationPageState extends State<NavigationPage> {
 
     if (mapController != null) {
       await mapController!.clearLines();
+
+      if (_driverSymbol != null) {
+        await mapController!.removeSymbol(_driverSymbol!);
+      }
     }
 
     if (mounted) {
       Navigator.pop(context);
     }
+  }
+
+  @override
+  void dispose() {
+    _positionStream?.cancel();
+    super.dispose();
   }
 
   @override
