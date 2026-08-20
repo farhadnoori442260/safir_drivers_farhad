@@ -749,23 +749,27 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-          // 🧪 دکمه شبیه‌سازی مسیر
-          Positioned(
-            bottom: 90,
-            right: 20,
-            child: FloatingActionButton.extended(
-              heroTag: 'test_drive_btn',
-              onPressed: () {
-                startSimulatedTestDrive(navController);
-              },
-              backgroundColor: SafirColors.primary,
-              icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
-              label: Text(
-                'voice_guidance'.tr(),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
+          // 🧭 دکمه تست صفحه مسیریابی
+Positioned(
+  bottom: 90,
+  right: 20,
+  child: FloatingActionButton.extended(
+    heroTag: 'navigation_test_btn',
+    onPressed: openNavigationTest,
+    backgroundColor: SafirColors.primary,
+    icon: const Icon(
+      Icons.navigation,
+      color: Colors.white,
+    ),
+    label: const Text(
+      'مسیریابی',
+      style: TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  ),
+),
 
           // 🎯 دکمه GPS
           Positioned(
