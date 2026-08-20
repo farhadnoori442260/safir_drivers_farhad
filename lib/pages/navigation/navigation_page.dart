@@ -26,11 +26,13 @@ class NavigationPage extends StatefulWidget {
 class _NavigationPageState extends State<NavigationPage> {
   MapLibreMapController? mapController;
   StreamSubscription<Position>? _positionStream;
-  Symbol? _driverSymbol;
 
   bool _mapStyleReady = false;
   bool _navigationStarted = false;
-    int _lastRouteVersion = 0;
+  bool _controllerListenerAdded = false;
+
+  int _lastRouteVersion = 0;
+  double _lastHeading = 0.0;
 
   void _onMapCreated(MapLibreMapController controller) {
     mapController = controller;
@@ -38,6 +40,14 @@ class _NavigationPageState extends State<NavigationPage> {
 
   Future<void> _onStyleLoaded() async {
     _mapStyleReady = true;
+
+    final controller =
+        Provider.of<NavigationController>(context, listen: false);
+
+    if (!_controllerListenerAdded) {
+      controller.addListener(_navigationControllerChanged);
+      _controllerListenerAdded = true;
+    }
 
     await _startNavigation();
     await _startLiveDriverTracking();
@@ -64,16 +74,9 @@ class _NavigationPageState extends State<NavigationPage> {
       return;
     }
 
-    await mapController!.clearLines();
+    _lastRouteVersion = controller.routeVersion;
 
-    await mapController!.addLine(
-      LineOptions(
-        geometry: points,
-        lineColor: '#1B7A57',
-        lineWidth: 6.0,
-        lineOpacity: 0.85,
-      ),
-    );
+    await _drawRoute(points);
 
     await mapController!.animateCamera(
       CameraUpdate.newCameraPosition(
@@ -86,10 +89,45 @@ class _NavigationPageState extends State<NavigationPage> {
     );
   }
 
+  Future<void> _drawRoute(List<LatLng> points) async {
+    if (!mounted || mapController == null || points.isEmpty) return;
+
+    await mapController!.clearLines();
+
+    await mapController!.addLine(
+      LineOptions(
+        geometry: points,
+        lineColor: '#1B7A57',
+        lineWidth: 6.0,
+        lineOpacity: 0.85,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+    );
+  }
+
+  void _navigationControllerChanged() {
+    if (!mounted || !_mapStyleReady || mapController == null) return;
+
+    final controller =
+        Provider.of<NavigationController>(context, listen: false);
+
+    if (controller.routeVersion == _lastRouteVersion) return;
+    if (controller.currentRoutePoints.isEmpty) return;
+
+    _lastRouteVersion = controller.routeVersion;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || mapController == null) return;
+
+      await _drawRoute(controller.currentRoutePoints);
+    });
+  }
+
   Future<void> _startLiveDriverTracking() async {
     if (!_mapStyleReady || mapController == null) return;
 
-    _positionStream?.cancel();
+    await _positionStream?.cancel();
 
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -115,28 +153,8 @@ class _NavigationPageState extends State<NavigationPage> {
       final driverLocation =
           navController.snappedDriverLocation ?? rawLocation;
 
-      final heading = position.heading.isFinite && position.heading >= 0
-          ? position.heading
-          : 0.0;
-
-      if (_driverSymbol == null) {
-        _driverSymbol = await mapController!.addSymbol(
-          SymbolOptions(
-            geometry: driverLocation,
-            iconImage: 'marker-15',
-            iconSize: 2.0,
-            iconColor: '#1B7A57',
-            iconRotate: heading,
-          ),
-        );
-      } else {
-        await mapController!.updateSymbol(
-          _driverSymbol!,
-          SymbolOptions(
-            geometry: driverLocation,
-            iconRotate: heading,
-          ),
-        );
+      if (position.heading.isFinite && position.heading >= 0) {
+        _lastHeading = position.heading;
       }
 
       await mapController!.animateCamera(
@@ -144,7 +162,7 @@ class _NavigationPageState extends State<NavigationPage> {
           CameraPosition(
             target: driverLocation,
             zoom: 17.5,
-            bearing: heading,
+            bearing: _lastHeading,
             tilt: 45.0,
           ),
         ),
@@ -153,19 +171,20 @@ class _NavigationPageState extends State<NavigationPage> {
   }
 
   Future<void> _stopNavigation() async {
-    _positionStream?.cancel();
+    await _positionStream?.cancel();
 
     final controller =
         Provider.of<NavigationController>(context, listen: false);
+
+    if (_controllerListenerAdded) {
+      controller.removeListener(_navigationControllerChanged);
+      _controllerListenerAdded = false;
+    }
 
     controller.stopNavigation();
 
     if (mapController != null) {
       await mapController!.clearLines();
-
-      if (_driverSymbol != null) {
-        await mapController!.removeSymbol(_driverSymbol!);
-      }
     }
 
     if (mounted) {
@@ -175,6 +194,13 @@ class _NavigationPageState extends State<NavigationPage> {
 
   @override
   void dispose() {
+    final controller =
+        Provider.of<NavigationController>(context, listen: false);
+
+    if (_controllerListenerAdded) {
+      controller.removeListener(_navigationControllerChanged);
+    }
+
     _positionStream?.cancel();
     super.dispose();
   }
@@ -195,28 +221,9 @@ class _NavigationPageState extends State<NavigationPage> {
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
-                    Consumer<NavigationController>(
+
+          Consumer<NavigationController>(
             builder: (context, controller, child) {
-                  if (controller.routeVersion != _lastRouteVersion &&
-        controller.currentRoutePoints.isNotEmpty &&
-        mapController != null) {
-      _lastRouteVersion = controller.routeVersion;
-
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted || mapController == null) return;
-
-        await mapController!.clearLines();
-
-        await mapController!.addLine(
-          LineOptions(
-            geometry: controller.currentRoutePoints,
-            lineColor: '#1B7A57',
-            lineWidth: 6.0,
-            lineOpacity: 0.85,
-          ),
-        );
-      });
-                  }
               if (!controller.isNavigating) {
                 return const SizedBox.shrink();
               }
