@@ -239,7 +239,6 @@ class _NavigationPageState extends State<NavigationPage> {
       iconImage: _driverIconName,
       iconSize: 0.55,
       iconRotate: heading,
-      iconRotationAlignment: 'map',
       iconAllowOverlap: true,
       iconIgnorePlacement: true,
     );
