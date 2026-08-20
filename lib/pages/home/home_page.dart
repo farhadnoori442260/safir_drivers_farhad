@@ -482,15 +482,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
     void openNavigationTest() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NavigationPage(
-          start: currentLatLng,
-          destination: const LatLng(34.5650, 69.2200),
-        ),
+  final testStart = currentLatLng;
+
+  final testDestination = LatLng(
+    currentLatLng.latitude + 0.0030,
+    currentLatLng.longitude + 0.0030,
+  );
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => NavigationPage(
+        start: testStart,
+        destination: testDestination,
       ),
-    );
+    ),
+  );
     }
 
   @override
