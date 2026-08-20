@@ -36,6 +36,9 @@ class StepInstruction {
 }
 
 class NavigationController extends ChangeNotifier {
+    LatLng? activeDestination;
+  bool isRerouting = false;
+  double distanceFromRoute = 0.0;
   bool isNavigating = false;
   bool _isVoiceEnabled = true;
 
@@ -104,6 +107,7 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
 
     if (start == null || destination == null) return [];
+    activeDestination = destination;
 
     final url = Uri.parse(
       'https://router.project-osrm.org/route/v1/driving/'
