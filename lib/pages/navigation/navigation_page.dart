@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
@@ -24,12 +25,18 @@ class NavigationPage extends StatefulWidget {
 }
 
 class _NavigationPageState extends State<NavigationPage> {
+  static const String _driverIconName = 'safir-driver-arrow';
+
   MapLibreMapController? mapController;
   StreamSubscription<Position>? _positionStream;
+  Symbol? _driverSymbol;
 
   bool _mapStyleReady = false;
   bool _navigationStarted = false;
   bool _controllerListenerAdded = false;
+  bool _driverIconAdded = false;
+  bool _cameraFollowing = true;
+  bool _isUpdatingMap = false;
 
   int _lastRouteVersion = 0;
   double _lastHeading = 0.0;
@@ -39,18 +46,71 @@ class _NavigationPageState extends State<NavigationPage> {
   }
 
   Future<void> _onStyleLoaded() async {
+    if (!mounted) return;
+
     _mapStyleReady = true;
 
-    final controller =
+    final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
     if (!_controllerListenerAdded) {
-      controller.addListener(_navigationControllerChanged);
+      navigationController.addListener(_navigationControllerChanged);
       _controllerListenerAdded = true;
     }
 
+    await _addDriverArrowImage();
     await _startNavigation();
     await _startLiveDriverTracking();
+  }
+
+  Future<void> _addDriverArrowImage() async {
+    if (mapController == null || _driverIconAdded) return;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    const size = 120.0;
+    const center = Offset(size / 2, size / 2);
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    final arrowPath = Path()
+      ..moveTo(center.dx, 8)
+      ..lineTo(100, 102)
+      ..lineTo(center.dx, 84)
+      ..lineTo(20, 102)
+      ..close();
+
+    canvas.drawPath(arrowPath.shift(const Offset(0, 4)), shadowPaint);
+
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 12
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(arrowPath, borderPaint);
+
+    final fillPaint = Paint()
+      ..color = SafirColors.primary
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(arrowPath, fillPaint);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+
+    if (bytes == null || mapController == null) return;
+
+    await mapController!.addImage(
+      _driverIconName,
+      bytes.buffer.asUint8List(),
+    );
+
+    _driverIconAdded = true;
   }
 
   Future<void> _startNavigation() async {
@@ -60,32 +120,28 @@ class _NavigationPageState extends State<NavigationPage> {
 
     _navigationStarted = true;
 
-    final controller =
+    final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
-    final points = await controller.startNavigation(
+    final routePoints = await navigationController.startNavigation(
       widget.start,
       widget.destination,
       context.locale.languageCode,
     );
 
-    if (!mounted || mapController == null || points.isEmpty) {
+    if (!mounted || mapController == null || routePoints.isEmpty) {
       _navigationStarted = false;
       return;
     }
 
-    _lastRouteVersion = controller.routeVersion;
+    _lastRouteVersion = navigationController.routeVersion;
 
-    await _drawRoute(points);
+    await _drawRoute(routePoints);
 
-    await mapController!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: widget.start,
-          zoom: 17.0,
-          tilt: 45.0,
-        ),
-      ),
+    await _updateDriverMarker(
+      widget.start,
+      heading: _lastHeading,
+      moveCamera: true,
     );
   }
 
@@ -98,8 +154,8 @@ class _NavigationPageState extends State<NavigationPage> {
       LineOptions(
         geometry: points,
         lineColor: '#1B7A57',
-        lineWidth: 6.0,
-        lineOpacity: 0.85,
+        lineWidth: 7.0,
+        lineOpacity: 0.9,
       ),
     );
   }
@@ -107,18 +163,18 @@ class _NavigationPageState extends State<NavigationPage> {
   void _navigationControllerChanged() {
     if (!mounted || !_mapStyleReady || mapController == null) return;
 
-    final controller =
+    final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
-    if (controller.routeVersion == _lastRouteVersion) return;
-    if (controller.currentRoutePoints.isEmpty) return;
+    if (navigationController.routeVersion == _lastRouteVersion) return;
+    if (navigationController.currentRoutePoints.isEmpty) return;
 
-    _lastRouteVersion = controller.routeVersion;
+    _lastRouteVersion = navigationController.routeVersion;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || mapController == null) return;
 
-      await _drawRoute(controller.currentRoutePoints);
+      await _drawRoute(navigationController.currentRoutePoints);
     });
   }
 
@@ -130,59 +186,105 @@ class _NavigationPageState extends State<NavigationPage> {
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 3,
+        distanceFilter: 2,
       ),
     ).listen((Position position) async {
-      if (!mounted || mapController == null) return;
+      if (!mounted || mapController == null || _isUpdatingMap) return;
 
-      final rawLocation = LatLng(
-        position.latitude,
-        position.longitude,
-      );
+      _isUpdatingMap = true;
 
-      final navController =
-          Provider.of<NavigationController>(context, listen: false);
+      try {
+        final rawLocation = LatLng(
+          position.latitude,
+          position.longitude,
+        );
 
-      navController.updateDriverPosition(
-        rawLocation,
-        langCode: context.locale.languageCode,
-      );
+        final navigationController =
+            Provider.of<NavigationController>(context, listen: false);
 
-      final driverLocation =
-          navController.snappedDriverLocation ?? rawLocation;
+        navigationController.updateDriverPosition(
+          rawLocation,
+          langCode: context.locale.languageCode,
+        );
 
-      if (position.heading.isFinite && position.heading >= 0) {
-        _lastHeading = position.heading;
+        final driverLocation =
+            navigationController.snappedDriverLocation ?? rawLocation;
+
+        if (position.heading.isFinite &&
+            position.heading >= 0 &&
+            position.heading <= 360) {
+          _lastHeading = position.heading;
+        }
+
+        await _updateDriverMarker(
+          driverLocation,
+          heading: _lastHeading,
+          moveCamera: _cameraFollowing,
+        );
+      } finally {
+        _isUpdatingMap = false;
       }
-
-      await mapController!.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: driverLocation,
-            zoom: 17.5,
-            bearing: _lastHeading,
-            tilt: 45.0,
-          ),
-        ),
-      );
     });
+  }
+
+  Future<void> _updateDriverMarker(
+    LatLng location, {
+    required double heading,
+    required bool moveCamera,
+  }) async {
+    if (!mounted || mapController == null || !_driverIconAdded) return;
+
+    final options = SymbolOptions(
+      geometry: location,
+      iconImage: _driverIconName,
+      iconSize: 0.55,
+      iconRotate: heading,
+      iconRotationAlignment: 'map',
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+    );
+
+    if (_driverSymbol == null) {
+      _driverSymbol = await mapController!.addSymbol(options);
+    } else {
+      await mapController!.updateSymbol(_driverSymbol!, options);
+    }
+
+    if (!moveCamera || mapController == null) return;
+
+    await mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: location,
+          zoom: 17.5,
+          bearing: heading,
+          tilt: 50.0,
+        ),
+      ),
+      duration: const Duration(milliseconds: 700),
+    );
   }
 
   Future<void> _stopNavigation() async {
     await _positionStream?.cancel();
 
-    final controller =
+    final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
     if (_controllerListenerAdded) {
-      controller.removeListener(_navigationControllerChanged);
+      navigationController.removeListener(_navigationControllerChanged);
       _controllerListenerAdded = false;
     }
 
-    controller.stopNavigation();
+    navigationController.stopNavigation();
 
     if (mapController != null) {
       await mapController!.clearLines();
+
+      if (_driverSymbol != null) {
+        await mapController!.removeSymbol(_driverSymbol!);
+        _driverSymbol = null;
+      }
     }
 
     if (mounted) {
@@ -192,11 +294,11 @@ class _NavigationPageState extends State<NavigationPage> {
 
   @override
   void dispose() {
-    final controller =
+    final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
     if (_controllerListenerAdded) {
-      controller.removeListener(_navigationControllerChanged);
+      navigationController.removeListener(_navigationControllerChanged);
     }
 
     _positionStream?.cancel();
@@ -211,6 +313,9 @@ class _NavigationPageState extends State<NavigationPage> {
           MapLibreMap(
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
+            onCameraIdle: () {
+              _cameraFollowing = false;
+            },
             styleString: 'assets/map/style.json',
             initialCameraPosition: CameraPosition(
               target: widget.start,
@@ -220,23 +325,23 @@ class _NavigationPageState extends State<NavigationPage> {
             trackCameraPosition: true,
           ),
 
-          Consumer<NavigationController>(
-            builder: (context, controller, child) {
-              if (!controller.isNavigating) {
-                return const SizedBox.shrink();
-              }
-
-              return const Align(
-                alignment: Alignment.center,
-                child: IgnorePointer(
-                  child: Icon(
-                    Icons.navigation,
-                    color: SafirColors.primary,
-                    size: 48,
-                  ),
-                ),
-              );
-            },
+          Positioned(
+            right: 16,
+            bottom: 118,
+            child: SafeArea(
+              child: FloatingActionButton(
+                heroTag: 'follow_driver_button',
+                mini: true,
+                backgroundColor: Colors.white,
+                foregroundColor: SafirColors.primary,
+                onPressed: () {
+                  setState(() {
+                    _cameraFollowing = true;
+                  });
+                },
+                child: const Icon(Icons.my_location),
+              ),
+            ),
           ),
 
           Consumer<NavigationController>(
@@ -255,6 +360,13 @@ class _NavigationPageState extends State<NavigationPage> {
                     decoration: BoxDecoration(
                       color: SafirColors.primary,
                       borderRadius: BorderRadius.circular(18),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Row(
                       children: [
