@@ -30,6 +30,7 @@ class _NavigationPageState extends State<NavigationPage> {
 
   bool _mapStyleReady = false;
   bool _navigationStarted = false;
+    int _lastRouteVersion = 0;
 
   void _onMapCreated(MapLibreMapController controller) {
     mapController = controller;
@@ -196,6 +197,26 @@ class _NavigationPageState extends State<NavigationPage> {
           ),
                     Consumer<NavigationController>(
             builder: (context, controller, child) {
+                  if (controller.routeVersion != _lastRouteVersion &&
+        controller.currentRoutePoints.isNotEmpty &&
+        mapController != null) {
+      _lastRouteVersion = controller.routeVersion;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || mapController == null) return;
+
+        await mapController!.clearLines();
+
+        await mapController!.addLine(
+          LineOptions(
+            geometry: controller.currentRoutePoints,
+            lineColor: '#1B7A57',
+            lineWidth: 6.0,
+            lineOpacity: 0.85,
+          ),
+        );
+      });
+                  }
               if (!controller.isNavigating) {
                 return const SizedBox.shrink();
               }
