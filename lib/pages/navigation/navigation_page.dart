@@ -239,8 +239,6 @@ class _NavigationPageState extends State<NavigationPage> {
       iconImage: _driverIconName,
       iconSize: 0.55,
       iconRotate: heading,
-      iconAllowOverlap: true,
-      iconIgnorePlacement: true,
     );
 
     if (_driverSymbol == null) {
