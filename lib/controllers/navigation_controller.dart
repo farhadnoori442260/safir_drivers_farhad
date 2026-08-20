@@ -187,7 +187,11 @@ class NavigationController extends ChangeNotifier {
       _currentStepIndex++;
       _updateCurrentStepInfo();
     }
+    distanceFromRoute = _getDistanceFromRoute(driverLatLng);
 
+    if (distanceFromRoute > 45 && !isRerouting) {
+      _rerouteFromCurrentLocation(driverLatLng);
+    }
     notifyListeners();
   }
   double _getDistanceFromRoute(LatLng rawLocation) {
