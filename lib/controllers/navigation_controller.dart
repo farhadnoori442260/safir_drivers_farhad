@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
@@ -46,6 +47,7 @@ class NavigationController extends ChangeNotifier {
 
   LatLng? activeDestination;
   LatLng? snappedDriverLocation;
+  LatLng? rawDriverLocation;
 
   bool isRerouting = false;
   bool isNavigating = false;
@@ -53,12 +55,14 @@ class NavigationController extends ChangeNotifier {
 
   double distanceFromRoute = 0.0;
   double distanceToNextStep = 0.0;
+  double driverRouteBearing = 0.0;
 
   final List<StepInstruction> _steps = [];
   final List<LatLng> routePoints = [];
   final Set<int> _spokenSteps = {};
 
   int _currentStepIndex = 0;
+  int _lastMatchedSegmentIndex = 0;
   String _activeLangCode = 'fa';
 
   String currentStreet = '';
@@ -67,10 +71,14 @@ class NavigationController extends ChangeNotifier {
   IconData _currentTurnIcon = Icons.straight;
 
   bool get isVoiceEnabled => _isVoiceEnabled;
+
   int get distanceToNextTurn => distanceToNextStep.ceil();
+
   String get navigationInstruction =>
       _currentInstruction.isNotEmpty ? _currentInstruction : currentStreet;
+
   IconData get currentTurnIcon => _currentTurnIcon;
+
   List<LatLng> get currentRoutePoints => List.unmodifiable(routePoints);
 
   void toggleVoice() {
@@ -108,6 +116,7 @@ class NavigationController extends ChangeNotifier {
   void startNavigationSimulated() {
     isNavigating = true;
     _currentStepIndex = 0;
+    _lastMatchedSegmentIndex = 0;
     _spokenSteps.clear();
     notifyListeners();
   }
@@ -125,13 +134,19 @@ class NavigationController extends ChangeNotifier {
     isRerouting = false;
     _activeLangCode = langCode;
     activeDestination = destination;
+    rawDriverLocation = start;
+    snappedDriverLocation = start;
 
     _steps.clear();
     routePoints.clear();
     _spokenSteps.clear();
+
     _currentStepIndex = 0;
+    _lastMatchedSegmentIndex = 0;
+
     distanceToNextStep = 0.0;
     distanceFromRoute = 0.0;
+    driverRouteBearing = 0.0;
 
     notifyListeners();
 
@@ -146,6 +161,13 @@ class NavigationController extends ChangeNotifier {
     }
 
     _applyRoute(route);
+
+    if (routePoints.length > 1) {
+      driverRouteBearing = _bearingBetween(
+        routePoints[0],
+        routePoints[1],
+      );
+    }
 
     if (_steps.isNotEmpty && _isVoiceEnabled) {
       VoiceGuidanceHelper.speakStep(
@@ -164,16 +186,33 @@ class NavigationController extends ChangeNotifier {
     LatLng driverLatLng, {
     String? langCode,
   }) {
-    if (!isNavigating || routePoints.isEmpty) return;
+    if (!isNavigating || routePoints.length < 2) {
+      return;
+    }
 
     if (langCode != null) {
       _activeLangCode = langCode;
     }
 
-    distanceFromRoute = _getDistanceFromRoute(driverLatLng);
-    snappedDriverLocation = _getSnappedLocation(driverLatLng);
+    rawDriverLocation = driverLatLng;
+
+    final match = _findClosestPointOnRoute(driverLatLng);
+
+    distanceFromRoute = match.distance;
+    _lastMatchedSegmentIndex = match.segmentIndex;
+
+    if (match.distance <= 40) {
+      snappedDriverLocation = match.point;
+      driverRouteBearing = match.bearing;
+    } else {
+      snappedDriverLocation = driverLatLng;
+    }
 
     if (_steps.isEmpty || _currentStepIndex >= _steps.length) {
+      if (distanceFromRoute > 50 && !isRerouting) {
+        _rerouteFromCurrentLocation(driverLatLng);
+      }
+
       notifyListeners();
       return;
     }
@@ -207,7 +246,7 @@ class NavigationController extends ChangeNotifier {
       _updateCurrentStepInfo();
     }
 
-    if (distanceFromRoute > 45 && !isRerouting) {
+    if (distanceFromRoute > 50 && !isRerouting) {
       _rerouteFromCurrentLocation(driverLatLng);
     }
 
@@ -259,6 +298,7 @@ class NavigationController extends ChangeNotifier {
         coordinates.map(
           (point) {
             final values = point as List;
+
             return LatLng(
               (values[1] as num).toDouble(),
               (values[0] as num).toDouble(),
@@ -268,7 +308,10 @@ class NavigationController extends ChangeNotifier {
       );
 
     final legs = route['legs'] as List? ?? [];
-    final firstLeg = legs.isNotEmpty ? legs.first as Map<String, dynamic> : {};
+    final firstLeg = legs.isNotEmpty
+        ? legs.first as Map<String, dynamic>
+        : <String, dynamic>{};
+
     final stepsJson = firstLeg['steps'] as List? ?? [];
 
     _steps
@@ -282,6 +325,7 @@ class NavigationController extends ChangeNotifier {
       );
 
     _currentStepIndex = 0;
+    _lastMatchedSegmentIndex = 0;
     _spokenSteps.clear();
 
     if (_steps.isNotEmpty) {
@@ -292,7 +336,9 @@ class NavigationController extends ChangeNotifier {
   }
 
   Future<void> _rerouteFromCurrentLocation(LatLng from) async {
-    if (activeDestination == null || isRerouting) return;
+    if (activeDestination == null || isRerouting) {
+      return;
+    }
 
     isRerouting = true;
     notifyListeners();
@@ -304,63 +350,129 @@ class NavigationController extends ChangeNotifier {
 
     if (route != null && isNavigating) {
       _applyRoute(route);
+
+      if (routePoints.length > 1) {
+        driverRouteBearing = _bearingBetween(
+          routePoints[0],
+          routePoints[1],
+        );
+      }
     }
 
     isRerouting = false;
     notifyListeners();
   }
 
-  double _getDistanceFromRoute(LatLng rawLocation) {
-    if (routePoints.isEmpty) return 0.0;
-
-    var minDistance = double.infinity;
-
-    for (final point in routePoints) {
-      final distance = Geolocator.distanceBetween(
-        rawLocation.latitude,
-        rawLocation.longitude,
-        point.latitude,
-        point.longitude,
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-      }
-    }
-
-    return minDistance;
-  }
-
-  LatLng _getSnappedLocation(LatLng rawLocation) {
-    if (routePoints.isEmpty) return rawLocation;
-
+  _RouteMatch _findClosestPointOnRoute(LatLng location) {
     var closestPoint = routePoints.first;
-    var minDistance = Geolocator.distanceBetween(
-      rawLocation.latitude,
-      rawLocation.longitude,
-      closestPoint.latitude,
-      closestPoint.longitude,
+    var closestDistance = double.infinity;
+    var closestSegmentIndex = 0;
+    var closestBearing = 0.0;
+
+    final startIndex = math.max(0, _lastMatchedSegmentIndex - 25);
+    final endIndex = math.min(
+      routePoints.length - 2,
+      _lastMatchedSegmentIndex + 100,
     );
 
-    for (final point in routePoints) {
-      final distance = Geolocator.distanceBetween(
-        rawLocation.latitude,
-        rawLocation.longitude,
-        point.latitude,
-        point.longitude,
+    for (var i = startIndex; i <= endIndex; i++) {
+      final start = routePoints[i];
+      final end = routePoints[i + 1];
+
+      final projectedPoint = _projectPointOnSegment(
+        location,
+        start,
+        end,
       );
 
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestPoint = point;
+      final distance = Geolocator.distanceBetween(
+        location.latitude,
+        location.longitude,
+        projectedPoint.latitude,
+        projectedPoint.longitude,
+      );
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestPoint = projectedPoint;
+        closestSegmentIndex = i;
+        closestBearing = _bearingBetween(start, end);
       }
     }
 
-    return minDistance <= 35 ? closestPoint : rawLocation;
+    return _RouteMatch(
+      point: closestPoint,
+      distance: closestDistance,
+      segmentIndex: closestSegmentIndex,
+      bearing: closestBearing,
+    );
+  }
+
+  LatLng _projectPointOnSegment(
+    LatLng point,
+    LatLng segmentStart,
+    LatLng segmentEnd,
+  ) {
+    final latitudeRadians = point.latitude * math.pi / 180.0;
+    final metersPerLatitudeDegree = 111132.0;
+    final metersPerLongitudeDegree =
+        111320.0 * math.cos(latitudeRadians);
+
+    final pointX = point.longitude * metersPerLongitudeDegree;
+    final pointY = point.latitude * metersPerLatitudeDegree;
+
+    final startX = segmentStart.longitude * metersPerLongitudeDegree;
+    final startY = segmentStart.latitude * metersPerLatitudeDegree;
+
+    final endX = segmentEnd.longitude * metersPerLongitudeDegree;
+    final endY = segmentEnd.latitude * metersPerLatitudeDegree;
+
+    final deltaX = endX - startX;
+    final deltaY = endY - startY;
+    final lengthSquared = (deltaX * deltaX) + (deltaY * deltaY);
+
+    if (lengthSquared == 0) {
+      return segmentStart;
+    }
+
+    var projection = (
+          ((pointX - startX) * deltaX) +
+          ((pointY - startY) * deltaY)
+        ) /
+        lengthSquared;
+
+    projection = projection.clamp(0.0, 1.0);
+
+    final projectedX = startX + (projection * deltaX);
+    final projectedY = startY + (projection * deltaY);
+
+    return LatLng(
+      projectedY / metersPerLatitudeDegree,
+      projectedX / metersPerLongitudeDegree,
+    );
+  }
+
+  double _bearingBetween(LatLng start, LatLng end) {
+    final lat1 = start.latitude * math.pi / 180.0;
+    final lat2 = end.latitude * math.pi / 180.0;
+    final deltaLongitude =
+        (end.longitude - start.longitude) * math.pi / 180.0;
+
+    final y = math.sin(deltaLongitude) * math.cos(lat2);
+
+    final x =
+        (math.cos(lat1) * math.sin(lat2)) -
+        (math.sin(lat1) * math.cos(lat2) * math.cos(deltaLongitude));
+
+    final bearing = math.atan2(y, x) * 180.0 / math.pi;
+
+    return (bearing + 360.0) % 360.0;
   }
 
   void _updateCurrentStepInfo({bool notify = true}) {
-    if (_currentStepIndex >= _steps.length) return;
+    if (_currentStepIndex >= _steps.length) {
+      return;
+    }
 
     final step = _steps[_currentStepIndex];
 
@@ -382,9 +494,11 @@ class NavigationController extends ChangeNotifier {
     switch (modifier) {
       case 'right':
       case 'slight right':
+      case 'sharp right':
         return 'به راست بپیچید';
       case 'left':
       case 'slight left':
+      case 'sharp left':
         return 'به چپ بپیچید';
       case 'uturn':
         return 'دور بزنید';
@@ -397,9 +511,11 @@ class NavigationController extends ChangeNotifier {
     switch (modifier) {
       case 'right':
       case 'slight right':
+      case 'sharp right':
         return Icons.turn_right;
       case 'left':
       case 'slight left':
+      case 'sharp left':
         return Icons.turn_left;
       case 'uturn':
         return Icons.u_turn_left;
@@ -417,11 +533,16 @@ class NavigationController extends ChangeNotifier {
     _spokenSteps.clear();
 
     _currentStepIndex = 0;
+    _lastMatchedSegmentIndex = 0;
+
     activeDestination = null;
+    rawDriverLocation = null;
     snappedDriverLocation = null;
 
     distanceFromRoute = 0.0;
     distanceToNextStep = 0.0;
+    driverRouteBearing = 0.0;
+
     currentStreet = '';
     currentModifier = 'straight';
     _currentInstruction = '';
@@ -430,4 +551,18 @@ class NavigationController extends ChangeNotifier {
     VoiceGuidanceHelper.stop();
     notifyListeners();
   }
+}
+
+class _RouteMatch {
+  final LatLng point;
+  final double distance;
+  final int segmentIndex;
+  final double bearing;
+
+  const _RouteMatch({
+    required this.point,
+    required this.distance,
+    required this.segmentIndex,
+    required this.bearing,
+  });
 }
