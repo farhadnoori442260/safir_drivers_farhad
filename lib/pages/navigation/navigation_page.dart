@@ -37,9 +37,9 @@ class _NavigationPageState extends State<NavigationPage> {
   bool _driverIconAdded = false;
   bool _cameraFollowing = true;
   bool _isUpdatingMap = false;
+  bool _isProgrammaticCameraMove = false;
 
   int _lastRouteVersion = 0;
-  double _lastHeading = 0.0;
 
   void _onMapCreated(MapLibreMapController controller) {
     mapController = controller;
@@ -73,17 +73,22 @@ class _NavigationPageState extends State<NavigationPage> {
     const center = Offset(size / 2, size / 2);
 
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.25)
+      ..color = Colors.black.withOpacity(0.28)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
     final arrowPath = Path()
-      ..moveTo(center.dx, 8)
-      ..lineTo(100, 102)
-      ..lineTo(center.dx, 84)
-      ..lineTo(20, 102)
+      ..moveTo(center.dx, 7)
+      ..lineTo(101, 103)
+      ..quadraticBezierTo(99, 108, 93, 105)
+      ..lineTo(center.dx, 87)
+      ..lineTo(27, 105)
+      ..quadraticBezierTo(21, 108, 19, 103)
       ..close();
 
-    canvas.drawPath(arrowPath.shift(const Offset(0, 4)), shadowPaint);
+    canvas.drawPath(
+      arrowPath.shift(const Offset(0, 5)),
+      shadowPaint,
+    );
 
     final borderPaint = Paint()
       ..color = Colors.white
@@ -99,9 +104,24 @@ class _NavigationPageState extends State<NavigationPage> {
 
     canvas.drawPath(arrowPath, fillPaint);
 
+    final innerPath = Path()
+      ..moveTo(center.dx, 26)
+      ..lineTo(80, 89)
+      ..lineTo(center.dx, 76)
+      ..lineTo(40, 89)
+      ..close();
+
+    final innerPaint = Paint()
+      ..color = Colors.white.withOpacity(0.22)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(innerPath, innerPaint);
+
     final picture = recorder.endRecording();
     final image = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final bytes = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
 
     if (bytes == null || mapController == null) return;
 
@@ -140,7 +160,7 @@ class _NavigationPageState extends State<NavigationPage> {
 
     await _updateDriverMarker(
       widget.start,
-      heading: _lastHeading,
+      heading: navigationController.driverRouteBearing,
       moveCamera: true,
     );
   }
@@ -153,9 +173,27 @@ class _NavigationPageState extends State<NavigationPage> {
     await mapController!.addLine(
       LineOptions(
         geometry: points,
-        lineColor: '#1B7A57',
-        lineWidth: 7.0,
-        lineOpacity: 0.9,
+        lineColor: '#0B4F3A',
+        lineWidth: 16.0,
+        lineOpacity: 0.72,
+      ),
+    );
+
+    await mapController!.addLine(
+      LineOptions(
+        geometry: points,
+        lineColor: '#168A61',
+        lineWidth: 11.0,
+        lineOpacity: 1.0,
+      ),
+    );
+
+    await mapController!.addLine(
+      LineOptions(
+        geometry: points,
+        lineColor: '#4EE1A1',
+        lineWidth: 4.0,
+        lineOpacity: 0.95,
       ),
     );
   }
@@ -166,8 +204,13 @@ class _NavigationPageState extends State<NavigationPage> {
     final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
-    if (navigationController.routeVersion == _lastRouteVersion) return;
-    if (navigationController.currentRoutePoints.isEmpty) return;
+    if (navigationController.routeVersion == _lastRouteVersion) {
+      return;
+    }
+
+    if (navigationController.currentRoutePoints.isEmpty) {
+      return;
+    }
 
     _lastRouteVersion = navigationController.routeVersion;
 
@@ -210,15 +253,11 @@ class _NavigationPageState extends State<NavigationPage> {
         final driverLocation =
             navigationController.snappedDriverLocation ?? rawLocation;
 
-        if (position.heading.isFinite &&
-            position.heading >= 0 &&
-            position.heading <= 360) {
-          _lastHeading = position.heading;
-        }
+        final routeHeading = navigationController.driverRouteBearing;
 
         await _updateDriverMarker(
           driverLocation,
-          heading: _lastHeading,
+          heading: routeHeading,
           moveCamera: _cameraFollowing,
         );
       } finally {
@@ -234,31 +273,150 @@ class _NavigationPageState extends State<NavigationPage> {
   }) async {
     if (!mounted || mapController == null || !_driverIconAdded) return;
 
-    final options = SymbolOptions(
+    final driverOptions = SymbolOptions(
       geometry: location,
       iconImage: _driverIconName,
-      iconSize: 0.55,
+      iconSize: 0.58,
       iconRotate: heading,
     );
 
     if (_driverSymbol == null) {
-      _driverSymbol = await mapController!.addSymbol(options);
+      _driverSymbol = await mapController!.addSymbol(driverOptions);
+
+      await mapController!.setSymbolIconAllowOverlap(
+        _driverSymbol!,
+        true,
+      );
+
+      await mapController!.setSymbolIconIgnorePlacement(
+        _driverSymbol!,
+        true,
+      );
     } else {
-      await mapController!.updateSymbol(_driverSymbol!, options);
+      await mapController!.updateSymbol(
+        _driverSymbol!,
+        driverOptions,
+      );
     }
 
     if (!moveCamera || mapController == null) return;
 
+    await _moveCameraToDriver(
+      location,
+      heading: heading,
+    );
+  }
+
+  Future<void> _moveCameraToDriver(
+    LatLng location, {
+    required double heading,
+  }) async {
+    if (mapController == null) return;
+
+    _isProgrammaticCameraMove = true;
+
+    try {
+      await mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: location,
+            zoom: 17.5,
+            bearing: heading,
+            tilt: 50.0,
+          ),
+        ),
+        duration: const Duration(milliseconds: 650),
+      );
+    } finally {
+      Future.delayed(
+        const Duration(milliseconds: 800),
+        () {
+          if (mounted) {
+            _isProgrammaticCameraMove = false;
+          }
+        },
+      );
+    }
+  }
+
+  Future<void> _showFullRoute() async {
+    if (mapController == null) return;
+
+    final navigationController =
+        Provider.of<NavigationController>(context, listen: false);
+
+    final points = navigationController.currentRoutePoints;
+
+    if (points.length < 2) return;
+
+    setState(() {
+      _cameraFollowing = false;
+    });
+
+    await mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        _boundsFromPoints(points),
+        left: 54.0,
+        top: 160.0,
+        right: 54.0,
+        bottom: 180.0,
+      ),
+      duration: const Duration(milliseconds: 700),
+    );
+  }
+
+  Future<void> _goToStart() async {
+    if (mapController == null) return;
+
+    setState(() {
+      _cameraFollowing = false;
+    });
+
     await mapController!.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: location,
-          zoom: 17.5,
-          bearing: heading,
-          tilt: 50.0,
+          target: widget.start,
+          zoom: 17.0,
+          tilt: 35.0,
         ),
       ),
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 600),
+    );
+  }
+
+  Future<void> _followDriver() async {
+    final navigationController =
+        Provider.of<NavigationController>(context, listen: false);
+
+    final location =
+        navigationController.snappedDriverLocation ?? widget.start;
+
+    setState(() {
+      _cameraFollowing = true;
+    });
+
+    await _moveCameraToDriver(
+      location,
+      heading: navigationController.driverRouteBearing,
+    );
+  }
+
+  LatLngBounds _boundsFromPoints(List<LatLng> points) {
+    var minLatitude = points.first.latitude;
+    var maxLatitude = points.first.latitude;
+    var minLongitude = points.first.longitude;
+    var maxLongitude = points.first.longitude;
+
+    for (final point in points) {
+      if (point.latitude < minLatitude) minLatitude = point.latitude;
+      if (point.latitude > maxLatitude) maxLatitude = point.latitude;
+      if (point.longitude < minLongitude) minLongitude = point.longitude;
+      if (point.longitude > maxLongitude) maxLongitude = point.longitude;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLatitude, minLongitude),
+      northeast: LatLng(maxLatitude, maxLongitude),
     );
   }
 
@@ -311,7 +469,11 @@ class _NavigationPageState extends State<NavigationPage> {
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
             onCameraIdle: () {
-              _cameraFollowing = false;
+              if (!_isProgrammaticCameraMove && mounted) {
+                setState(() {
+                  _cameraFollowing = false;
+                });
+              }
             },
             styleString: 'assets/map/style.json',
             initialCameraPosition: CameraPosition(
@@ -324,19 +486,30 @@ class _NavigationPageState extends State<NavigationPage> {
 
           Positioned(
             right: 16,
-            bottom: 118,
+            bottom: 112,
             child: SafeArea(
-              child: FloatingActionButton(
-                heroTag: 'follow_driver_button',
-                mini: true,
-                backgroundColor: Colors.white,
-                foregroundColor: SafirColors.primary,
-                onPressed: () {
-                  setState(() {
-                    _cameraFollowing = true;
-                  });
-                },
-                child: const Icon(Icons.my_location),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _MapActionButton(
+                    icon: Icons.alt_route,
+                    tooltip: 'نمایش کل مسیر',
+                    onPressed: _showFullRoute,
+                  ),
+                  const SizedBox(height: 10),
+                  _MapActionButton(
+                    icon: Icons.home_outlined,
+                    tooltip: 'بازگشت به مبدا',
+                    onPressed: _goToStart,
+                  ),
+                  const SizedBox(height: 10),
+                  _MapActionButton(
+                    icon: Icons.my_location,
+                    tooltip: 'بازگشت به راننده',
+                    iconColor: SafirColors.primary,
+                    onPressed: _followDriver,
+                  ),
+                ],
               ),
             ),
           ),
@@ -420,6 +593,37 @@ class _NavigationPageState extends State<NavigationPage> {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MapActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Color? iconColor;
+
+  const _MapActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 5,
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          color: iconColor ?? Colors.black87,
+        ),
       ),
     );
   }
