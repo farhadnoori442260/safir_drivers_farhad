@@ -126,7 +126,6 @@ class _NavigationPageState extends State<NavigationPage> {
             iconSize: 2.0,
             iconColor: '#1B7A57',
             iconRotate: heading,
-            iconRotationAlignment: 'map',
           ),
         );
       } else {
@@ -135,7 +134,6 @@ class _NavigationPageState extends State<NavigationPage> {
           SymbolOptions(
             geometry: driverLocation,
             iconRotate: heading,
-            iconRotationAlignment: 'map',
           ),
         );
       }
