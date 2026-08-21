@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../models/place_search_result.dart';
@@ -9,11 +11,11 @@ import '../../widgets/navigation/destination_search_sheet.dart';
 import 'navigation_page.dart';
 
 class DestinationSearchPage extends StatefulWidget {
-  final LatLng driverLocation;
+  final LatLng? currentLocation;
 
   const DestinationSearchPage({
     super.key,
-    required this.driverLocation,
+    this.currentLocation,
   });
 
   @override
@@ -26,21 +28,36 @@ class _DestinationSearchPageState
   static const String _destinationPinImage =
       'safir-destination-select-pin';
 
-  static const String _driverPinImage =
-      'safir-driver-select-pin';
+  static const String _currentLocationImage =
+      'safir-current-location-pin';
 
   MapLibreMapController? _mapController;
 
   Symbol? _destinationSymbol;
-  Symbol? _driverSymbol;
+  Symbol? _currentLocationSymbol;
+  Line? _previewLine;
 
   PlaceSearchResult? _selectedPlace;
 
+  LatLng? _currentLocation;
+  StreamSubscription<Position>? _positionSubscription;
+
   bool _isStyleLoaded = false;
   bool _isDestinationImageAdded = false;
-  bool _isDriverImageAdded = false;
+  bool _isCurrentLocationImageAdded = false;
+  bool _isLoadingLocation = true;
 
-  void _onMapCreated(MapLibreMapController controller) {
+  @override
+  void initState() {
+    super.initState();
+
+    _currentLocation = widget.currentLocation;
+    _startLocation();
+  }
+
+  void _onMapCreated(
+    MapLibreMapController controller,
+  ) {
     _mapController = controller;
   }
 
@@ -48,10 +65,91 @@ class _DestinationSearchPageState
     _isStyleLoaded = true;
 
     await _addDestinationPinImage();
-    await _addDriverPinImage();
+    await _addCurrentLocationImage();
 
-    await _showDriverOnMap();
+    await _showCurrentLocationOnMap();
     await _showSelectedDestinationOnMap();
+  }
+
+  Future<void> _startLocation() async {
+    try {
+      final serviceEnabled =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
+        _showLocationMessage(
+          'لطفاً موقعیت مکانی گوشی را روشن کنید.',
+        );
+        return;
+      }
+
+      var permission =
+          await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission =
+            await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission ==
+              LocationPermission.deniedForever) {
+        _showLocationMessage(
+          'اجازهٔ دسترسی به موقعیت مکانی داده نشد.',
+        );
+        return;
+      }
+
+      final position =
+          await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      _updateCurrentLocation(position);
+
+      _positionSubscription =
+          Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 5,
+        ),
+      ).listen(_updateCurrentLocation);
+    } catch (_) {
+      _showLocationMessage(
+        'دریافت موقعیت فعلی امکان‌پذیر نشد.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+        });
+      }
+    }
+  }
+
+  void _updateCurrentLocation(Position position) {
+    final location = LatLng(
+      position.latitude,
+      position.longitude,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _currentLocation = location;
+    });
+
+    _showCurrentLocationOnMap();
+  }
+
+  void _showLocationMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _addDestinationPinImage() async {
@@ -66,15 +164,19 @@ class _DestinationSearchPageState
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    final size = Size(
-      width.toDouble(),
-      height.toDouble(),
+    _drawDestinationPin(
+      canvas,
+      const Size(
+        width.toDouble(),
+        height.toDouble(),
+      ),
     );
 
-    _drawDestinationPin(canvas, size);
-
     final picture = recorder.endRecording();
-    final image = await picture.toImage(width, height);
+    final image = await picture.toImage(
+      width,
+      height,
+    );
 
     final bytes = await image.toByteData(
       format: ui.ImageByteFormat.png,
@@ -92,27 +194,31 @@ class _DestinationSearchPageState
     _isDestinationImageAdded = true;
   }
 
-  Future<void> _addDriverPinImage() async {
+  Future<void> _addCurrentLocationImage() async {
     if (_mapController == null ||
-        _isDriverImageAdded) {
+        _isCurrentLocationImageAdded) {
       return;
     }
 
-    const width = 100;
-    const height = 100;
+    const width = 160;
+    const height = 160;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    final size = Size(
-      width.toDouble(),
-      height.toDouble(),
+    _drawCurrentLocation(
+      canvas,
+      const Size(
+        width.toDouble(),
+        height.toDouble(),
+      ),
     );
 
-    _drawDriverPin(canvas, size);
-
     final picture = recorder.endRecording();
-    final image = await picture.toImage(width, height);
+    final image = await picture.toImage(
+      width,
+      height,
+    );
 
     final bytes = await image.toByteData(
       format: ui.ImageByteFormat.png,
@@ -123,11 +229,11 @@ class _DestinationSearchPageState
     }
 
     await _mapController!.addImage(
-      _driverPinImage,
+      _currentLocationImage,
       bytes.buffer.asUint8List(),
     );
 
-    _isDriverImageAdded = true;
+    _isCurrentLocationImageAdded = true;
   }
 
   void _drawDestinationPin(
@@ -177,10 +283,10 @@ class _DestinationSearchPageState
 
     canvas.drawPath(path, borderPaint);
 
-    final fillPaint = Paint()
-      ..color = const Color(0xFFE84C4C);
-
-    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(
+      path,
+      Paint()..color = const Color(0xFFE84C4C),
+    );
 
     canvas.drawCircle(
       Offset(centerX, 43),
@@ -195,7 +301,7 @@ class _DestinationSearchPageState
     );
   }
 
-  void _drawDriverPin(
+  void _drawCurrentLocation(
     Canvas canvas,
     Size size,
   ) {
@@ -204,66 +310,61 @@ class _DestinationSearchPageState
       size.height / 2,
     );
 
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.24)
-      ..maskFilter = const MaskFilter.blur(
-        BlurStyle.normal,
-        6,
-      );
-
     canvas.drawCircle(
-      center.translate(0, 4),
-      31,
-      shadowPaint,
+      center,
+      70,
+      Paint()
+        ..color = SafirColors.primary.withOpacity(0.10),
     );
 
     canvas.drawCircle(
       center,
-      35,
+      52,
+      Paint()
+        ..color = SafirColors.primary.withOpacity(0.18),
+    );
+
+    canvas.drawCircle(
+      center,
+      36,
       Paint()..color = Colors.white,
     );
 
     canvas.drawCircle(
       center,
-      28,
+      27,
       Paint()..color = SafirColors.primary,
     );
 
-    final arrow = Path()
-      ..moveTo(center.dx, 15)
-      ..lineTo(center.dx + 18, 63)
-      ..lineTo(center.dx, 53)
-      ..lineTo(center.dx - 18, 63)
-      ..close();
-
-    canvas.drawPath(
-      arrow,
+    canvas.drawCircle(
+      center,
+      8,
       Paint()..color = Colors.white,
     );
   }
 
-  Future<void> _showDriverOnMap() async {
+  Future<void> _showCurrentLocationOnMap() async {
     if (!_isStyleLoaded ||
-        !_isDriverImageAdded ||
-        _mapController == null) {
+        !_isCurrentLocationImageAdded ||
+        _mapController == null ||
+        _currentLocation == null) {
       return;
     }
 
     final options = SymbolOptions(
-      geometry: widget.driverLocation,
-      iconImage: _driverPinImage,
-      iconSize: 0.72,
+      geometry: _currentLocation!,
+      iconImage: _currentLocationImage,
+      iconSize: 0.70,
       iconAllowOverlap: true,
       iconIgnorePlacement: true,
     );
 
-    if (_driverSymbol == null) {
-      _driverSymbol = await _mapController!.addSymbol(
-        options,
-      );
+    if (_currentLocationSymbol == null) {
+      _currentLocationSymbol =
+          await _mapController!.addSymbol(options);
     } else {
       await _mapController!.updateSymbol(
-        _driverSymbol!,
+        _currentLocationSymbol!,
         options,
       );
     }
@@ -279,6 +380,25 @@ class _DestinationSearchPageState
     });
 
     await _showSelectedDestinationOnMap();
+    await _drawPreviewLine();
+  }
+
+  Future<void> _selectDestinationFromMap(
+    LatLng coordinates,
+  ) async {
+    if (!mounted) return;
+
+    setState(() {
+      _selectedPlace = PlaceSearchResult(
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        name: 'مقصد انتخاب‌شده',
+        address: 'نقطه انتخاب‌شده روی نقشه',
+      );
+    });
+
+    await _showSelectedDestinationOnMap();
+    await _drawPreviewLine();
   }
 
   Future<void> _showSelectedDestinationOnMap() async {
@@ -325,10 +445,48 @@ class _DestinationSearchPageState
     );
   }
 
+  Future<void> _drawPreviewLine() async {
+    if (_mapController == null ||
+        _currentLocation == null ||
+        _selectedPlace == null) {
+      return;
+    }
+
+    final destination = LatLng(
+      _selectedPlace!.latitude,
+      _selectedPlace!.longitude,
+    );
+
+    final options = LineOptions(
+      geometry: [
+        _currentLocation!,
+        destination,
+      ],
+      lineColor: '#2367D1',
+      lineWidth: 5.0,
+      lineOpacity: 0.85,
+      lineCap: 'round',
+      lineJoin: 'round',
+    );
+
+    if (_previewLine == null) {
+      _previewLine =
+          await _mapController!.addLine(options);
+    } else {
+      await _mapController!.updateLine(
+        _previewLine!,
+        options,
+      );
+    }
+  }
+
   void _confirmDestination() {
     final place = _selectedPlace;
 
-    if (place == null) return;
+    if (place == null ||
+        _currentLocation == null) {
+      return;
+    }
 
     final destination = LatLng(
       place.latitude,
@@ -339,7 +497,7 @@ class _DestinationSearchPageState
       context,
       MaterialPageRoute(
         builder: (_) => NavigationPage(
-          start: widget.driverLocation,
+          start: _currentLocation!,
           destination: destination,
         ),
       ),
@@ -348,6 +506,8 @@ class _DestinationSearchPageState
 
   @override
   void dispose() {
+    _positionSubscription?.cancel();
+
     if (_mapController != null) {
       if (_destinationSymbol != null) {
         _mapController!.removeSymbol(
@@ -355,9 +515,15 @@ class _DestinationSearchPageState
         );
       }
 
-      if (_driverSymbol != null) {
+      if (_currentLocationSymbol != null) {
         _mapController!.removeSymbol(
-          _driverSymbol!,
+          _currentLocationSymbol!,
+        );
+      }
+
+      if (_previewLine != null) {
+        _mapController!.removeLine(
+          _previewLine!,
         );
       }
     }
@@ -367,20 +533,56 @@ class _DestinationSearchPageState
 
   @override
   Widget build(BuildContext context) {
+    final fallbackLocation =
+        widget.currentLocation ??
+            const LatLng(
+              34.5553,
+              69.2075,
+            );
+
     return Scaffold(
       body: Stack(
         children: [
           MapLibreMap(
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
+            onMapLongClick: (
+              point,
+              coordinates,
+            ) {
+              _selectDestinationFromMap(
+                coordinates,
+              );
+            },
             initialCameraPosition: CameraPosition(
-              target: widget.driverLocation,
+              target: _currentLocation ??
+                  fallbackLocation,
               zoom: 15.5,
             ),
             styleString: 'assets/map/style.json',
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
+
+          if (_isLoadingLocation)
+            const Positioned(
+              top: 88,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      'در حال دریافت موقعیت شما...',
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           Positioned(
             top: 16,
