@@ -386,6 +386,7 @@ class _DestinationSearchPageState
 
     setState(() {
       _selectedPlace = PlaceSearchResult(
+  title: 'مقصد انتخاب‌شده',
   latitude: coordinates.latitude,
   longitude: coordinates.longitude,
 );
@@ -457,8 +458,6 @@ class _DestinationSearchPageState
       lineColor: '#2367D1',
       lineWidth: 5.0,
       lineOpacity: 0.85,
-      lineCap: 'round',
-      lineJoin: 'round',
     );
 
     if (_previewLine == null) {
