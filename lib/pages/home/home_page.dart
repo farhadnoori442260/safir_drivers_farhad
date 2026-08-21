@@ -487,7 +487,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     context,
     MaterialPageRoute(
       builder: (_) => DestinationSearchPage(
-        driverLocation: currentLatLng,
+        currentLocation: currentLatLng,
       ),
     ),
   );
