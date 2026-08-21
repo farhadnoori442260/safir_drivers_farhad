@@ -357,7 +357,6 @@ class _DestinationSearchPageState
       geometry: _currentLocation!,
       iconImage: _currentLocationImage,
       iconSize: 0.70,
-      iconAllowOverlap: true,
       iconIgnorePlacement: true,
     );
 
