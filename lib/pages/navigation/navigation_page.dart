@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:ui' as ui;
-
+import 'dart:math' as math;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -544,15 +544,15 @@ class _NavigationPageState extends State<NavigationPage> {
     final deltaLongitude =
         (end.longitude - start.longitude) * 0.017453292519943295;
 
-    final y = mathSin(deltaLongitude) * mathCos(endLatitudeRadians);
+    final y = math.sin(deltaLongitude) * math.cos(endLatitudeRadians);
 
-    final x =
-        (mathCos(latitudeRadians) * mathSin(endLatitudeRadians)) -
-        (mathSin(latitudeRadians) *
-            mathCos(endLatitudeRadians) *
-            mathCos(deltaLongitude));
+final x =
+    (math.cos(latitudeRadians) * math.sin(endLatitudeRadians)) -
+    (math.sin(latitudeRadians) *
+        math.cos(endLatitudeRadians) *
+        math.cos(deltaLongitude));
 
-    final heading = atan2Degrees(y, x);
+final heading = math.atan2(y, x) * 57.29577951308232;
 
     return (heading + 360.0) % 360.0;
   }
@@ -1003,17 +1003,3 @@ enum _TurnDirection {
   straight,
   uTurn,
 }
-
-class _Math {
-  static double sin(double value) => _sin(value);
-  static double cos(double value) => _cos(value);
-  static double atan2(double y, double x) => _atan2(y, x);
-
-  static double _sin(double value) => _mathSin(value);
-  static double _cos(double value) => _mathCos(value);
-  static double _atan2(double y, double x) => _mathAtan2(y, x);
-}
-
-double _mathSin(double value) => 0;
-double _mathCos(double value) => 0;
-double _mathAtan2(double y, double x) => 0;
