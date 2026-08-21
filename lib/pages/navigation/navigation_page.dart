@@ -26,15 +26,26 @@ class NavigationPage extends StatefulWidget {
 
 class _NavigationPageState extends State<NavigationPage> {
   static const String _driverIconName = 'safir-driver-arrow';
+  static const String _destinationIconName = 'safir-destination-pin';
+  static const String _leftTurnIconName = 'safir-turn-left';
+  static const String _rightTurnIconName = 'safir-turn-right';
+  static const String _straightIconName = 'safir-turn-straight';
+  static const String _uTurnIconName = 'safir-turn-uturn';
 
   MapLibreMapController? mapController;
   StreamSubscription<Position>? _positionStream;
+
   Symbol? _driverSymbol;
+  Symbol? _destinationSymbol;
+  Symbol? _streetNameSymbol;
+
+  final List<Symbol> _turnSymbols = [];
 
   bool _mapStyleReady = false;
   bool _navigationStarted = false;
   bool _controllerListenerAdded = false;
-  bool _driverIconAdded = false;
+  bool _iconsAdded = false;
+
   bool _cameraFollowing = true;
   bool _isUpdatingMap = false;
   bool _isProgrammaticCameraMove = false;
@@ -58,67 +69,91 @@ class _NavigationPageState extends State<NavigationPage> {
       _controllerListenerAdded = true;
     }
 
-    await _addDriverArrowImage();
+    await _addMapImages();
     await _startNavigation();
     await _startLiveDriverTracking();
   }
 
-  Future<void> _addDriverArrowImage() async {
-    if (mapController == null || _driverIconAdded) return;
+  Future<void> _addMapImages() async {
+    if (mapController == null || _iconsAdded) return;
+
+    await _addCanvasImage(
+      _driverIconName,
+      _drawDriverArrow,
+      width: 120,
+      height: 120,
+    );
+
+    await _addCanvasImage(
+      _destinationIconName,
+      _drawDestinationPin,
+      width: 100,
+      height: 120,
+    );
+
+    await _addCanvasImage(
+      _leftTurnIconName,
+      (canvas, size) => _drawTurnArrow(
+        canvas,
+        size,
+        direction: _TurnDirection.left,
+      ),
+      width: 96,
+      height: 96,
+    );
+
+    await _addCanvasImage(
+      _rightTurnIconName,
+      (canvas, size) => _drawTurnArrow(
+        canvas,
+        size,
+        direction: _TurnDirection.right,
+      ),
+      width: 96,
+      height: 96,
+    );
+
+    await _addCanvasImage(
+      _straightIconName,
+      (canvas, size) => _drawTurnArrow(
+        canvas,
+        size,
+        direction: _TurnDirection.straight,
+      ),
+      width: 96,
+      height: 96,
+    );
+
+    await _addCanvasImage(
+      _uTurnIconName,
+      (canvas, size) => _drawTurnArrow(
+        canvas,
+        size,
+        direction: _TurnDirection.uTurn,
+      ),
+      width: 96,
+      height: 96,
+    );
+
+    _iconsAdded = true;
+  }
+
+  Future<void> _addCanvasImage(
+    String name,
+    void Function(Canvas canvas, Size size) painter, {
+    required int width,
+    required int height,
+  }) async {
+    if (mapController == null) return;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    final size = Size(width.toDouble(), height.toDouble());
 
-    const size = 120.0;
-    const center = Offset(size / 2, size / 2);
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.28)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-
-    final arrowPath = Path()
-      ..moveTo(center.dx, 7)
-      ..lineTo(101, 103)
-      ..quadraticBezierTo(99, 108, 93, 105)
-      ..lineTo(center.dx, 87)
-      ..lineTo(27, 105)
-      ..quadraticBezierTo(21, 108, 19, 103)
-      ..close();
-
-    canvas.drawPath(
-      arrowPath.shift(const Offset(0, 5)),
-      shadowPaint,
-    );
-
-    final borderPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawPath(arrowPath, borderPaint);
-
-    final fillPaint = Paint()
-      ..color = SafirColors.primary
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(arrowPath, fillPaint);
-
-    final innerPath = Path()
-      ..moveTo(center.dx, 26)
-      ..lineTo(80, 89)
-      ..lineTo(center.dx, 76)
-      ..lineTo(40, 89)
-      ..close();
-
-    final innerPaint = Paint()
-      ..color = Colors.white.withOpacity(0.22)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(innerPath, innerPaint);
+    painter(canvas, size);
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(size.toInt(), size.toInt());
+    final image = await picture.toImage(width, height);
     final bytes = await image.toByteData(
       format: ui.ImageByteFormat.png,
     );
@@ -126,11 +161,193 @@ class _NavigationPageState extends State<NavigationPage> {
     if (bytes == null || mapController == null) return;
 
     await mapController!.addImage(
-      _driverIconName,
+      name,
       bytes.buffer.asUint8List(),
     );
+  }
 
-    _driverIconAdded = true;
+  void _drawDriverArrow(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+
+    final path = Path()
+      ..moveTo(center.dx, 8)
+      ..lineTo(size.width - 18, size.height - 19)
+      ..quadraticBezierTo(
+        size.width - 16,
+        size.height - 10,
+        size.width - 27,
+        size.height - 15,
+      )
+      ..lineTo(center.dx, size.height - 35)
+      ..lineTo(27, size.height - 15)
+      ..quadraticBezierTo(16, size.height - 10, 18, size.height - 19)
+      ..close();
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.26)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    canvas.drawPath(path.shift(const Offset(0, 5)), shadowPaint);
+
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 12
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(path, borderPaint);
+
+    final fillPaint = Paint()
+      ..color = SafirColors.primary
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, fillPaint);
+  }
+
+  void _drawDestinationPin(Canvas canvas, Size size) {
+    final centerX = size.width / 2;
+    final top = 8.0;
+    final pinBottom = size.height - 8.0;
+
+    final pinPath = Path()
+      ..moveTo(centerX, pinBottom)
+      ..cubicTo(
+        12,
+        size.height - 42,
+        10,
+        22,
+        centerX,
+        top,
+      )
+      ..cubicTo(
+        size.width - 10,
+        22,
+        size.width - 12,
+        size.height - 42,
+        centerX,
+        pinBottom,
+      )
+      ..close();
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.24)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+
+    canvas.drawPath(pinPath.shift(const Offset(0, 4)), shadowPaint);
+
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7;
+
+    canvas.drawPath(pinPath, borderPaint);
+
+    final fillPaint = Paint()..color = const Color(0xFFE84242);
+
+    canvas.drawPath(pinPath, fillPaint);
+
+    final circlePaint = Paint()..color = Colors.white;
+
+    canvas.drawCircle(
+      Offset(centerX, 43),
+      13,
+      circlePaint,
+    );
+
+    final dotPaint = Paint()..color = const Color(0xFFE84242);
+
+    canvas.drawCircle(
+      Offset(centerX, 43),
+      7,
+      dotPaint,
+    );
+  }
+
+  void _drawTurnArrow(
+    Canvas canvas,
+    Size size, {
+    required _TurnDirection direction,
+  }) {
+    final center = Offset(size.width / 2, size.height / 2);
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+
+    final path = Path();
+
+    if (direction == _TurnDirection.straight) {
+      path
+        ..moveTo(center.dx - 12, size.height - 15)
+        ..lineTo(center.dx - 12, 35)
+        ..lineTo(23, 35)
+        ..lineTo(center.dx, 10)
+        ..lineTo(73, 35)
+        ..lineTo(center.dx + 12, 35)
+        ..lineTo(center.dx + 12, size.height - 15)
+        ..close();
+    } else if (direction == _TurnDirection.left) {
+      path
+        ..moveTo(78, size.height - 16)
+        ..lineTo(56, size.height - 16)
+        ..lineTo(56, 49)
+        ..cubicTo(56, 40, 49, 35, 39, 35)
+        ..lineTo(31, 35)
+        ..lineTo(31, 49)
+        ..lineTo(10, 27)
+        ..lineTo(31, 5)
+        ..lineTo(31, 20)
+        ..lineTo(40, 20)
+        ..cubicTo(61, 20, 78, 33, 78, 51)
+        ..close();
+    } else if (direction == _TurnDirection.right) {
+      path
+        ..moveTo(18, size.height - 16)
+        ..lineTo(40, size.height - 16)
+        ..lineTo(40, 49)
+        ..cubicTo(40, 40, 47, 35, 57, 35)
+        ..lineTo(65, 35)
+        ..lineTo(65, 49)
+        ..lineTo(86, 27)
+        ..lineTo(65, 5)
+        ..lineTo(65, 20)
+        ..lineTo(56, 20)
+        ..cubicTo(35, 20, 18, 33, 18, 51)
+        ..close();
+    } else {
+      path
+        ..moveTo(65, size.height - 13)
+        ..lineTo(43, size.height - 13)
+        ..lineTo(43, 54)
+        ..cubicTo(43, 42, 51, 34, 62, 34)
+        ..lineTo(70, 34)
+        ..lineTo(70, 49)
+        ..lineTo(89, 27)
+        ..lineTo(70, 5)
+        ..lineTo(70, 20)
+        ..lineTo(61, 20)
+        ..cubicTo(39, 20, 23, 35, 23, 55)
+        ..lineTo(23, size.height - 13)
+        ..lineTo(10, size.height - 13)
+        ..lineTo(37, size.height - 2)
+        ..close();
+    }
+
+    canvas.drawPath(path.shift(const Offset(0, 3)), shadowPaint);
+
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(path, borderPaint);
+
+    final fillPaint = Paint()
+      ..color = const Color(0xFF168A61)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, fillPaint);
   }
 
   Future<void> _startNavigation() async {
@@ -157,6 +374,7 @@ class _NavigationPageState extends State<NavigationPage> {
     _lastRouteVersion = navigationController.routeVersion;
 
     await _drawRoute(routePoints);
+    await _drawRouteDecorations(navigationController);
 
     await _updateDriverMarker(
       widget.start,
@@ -173,17 +391,17 @@ class _NavigationPageState extends State<NavigationPage> {
     await mapController!.addLine(
       LineOptions(
         geometry: points,
-        lineColor: '#0B4F3A',
-        lineWidth: 16.0,
-        lineOpacity: 0.72,
+        lineColor: '#07553F',
+        lineWidth: 18.0,
+        lineOpacity: 0.78,
       ),
     );
 
     await mapController!.addLine(
       LineOptions(
         geometry: points,
-        lineColor: '#168A61',
-        lineWidth: 11.0,
+        lineColor: '#10B981',
+        lineWidth: 12.0,
         lineOpacity: 1.0,
       ),
     );
@@ -191,11 +409,179 @@ class _NavigationPageState extends State<NavigationPage> {
     await mapController!.addLine(
       LineOptions(
         geometry: points,
-        lineColor: '#4EE1A1',
-        lineWidth: 4.0,
+        lineColor: '#B8FFE3',
+        lineWidth: 3.5,
         lineOpacity: 0.95,
       ),
     );
+  }
+
+  Future<void> _drawRouteDecorations(
+    NavigationController navigationController,
+  ) async {
+    if (mapController == null) return;
+
+    await _clearRouteDecorations();
+
+    _destinationSymbol = await mapController!.addSymbol(
+      SymbolOptions(
+        geometry: widget.destination,
+        iconImage: _destinationIconName,
+        iconSize: 0.68,
+      ),
+    );
+
+    await mapController!.setSymbolIconAllowOverlap(true);
+    await mapController!.setSymbolIconIgnorePlacement(true);
+
+    final steps = navigationController.routeSteps;
+
+    for (var index = 0; index < steps.length; index++) {
+      final step = steps[index];
+
+      if (step.distance < 18) continue;
+      if (index == 0 && step.modifier == 'straight') continue;
+
+      final iconName = _turnIconName(step.modifier);
+
+      final turnSymbol = await mapController!.addSymbol(
+        SymbolOptions(
+          geometry: step.location,
+          iconImage: iconName,
+          iconSize: 0.44,
+          iconRotate: _routeBearingAt(
+            step.location,
+            navigationController.currentRoutePoints,
+          ),
+        ),
+      );
+
+      _turnSymbols.add(turnSymbol);
+    }
+
+    final firstStreetStep = steps.firstWhere(
+      (step) => step.streetName.trim().isNotEmpty,
+      orElse: () => StepInstruction(
+        instruction: 'straight',
+        streetName: '',
+        modifier: 'straight',
+        location: widget.start,
+        distance: 0,
+      ),
+    );
+
+    if (firstStreetStep.streetName.trim().isNotEmpty) {
+      _streetNameSymbol = await mapController!.addSymbol(
+        SymbolOptions(
+          geometry: firstStreetStep.location,
+          textField: firstStreetStep.streetName,
+          textSize: 14.0,
+          textColor: '#0F2B22',
+          textHaloColor: '#FFFFFF',
+          textHaloWidth: 2.5,
+          textAnchor: 'bottom',
+          textOffset: const Offset(0, -2.2),
+        ),
+      );
+    }
+  }
+
+  String _turnIconName(String modifier) {
+    switch (modifier) {
+      case 'left':
+      case 'slight left':
+      case 'sharp left':
+        return _leftTurnIconName;
+      case 'right':
+      case 'slight right':
+      case 'sharp right':
+        return _rightTurnIconName;
+      case 'uturn':
+        return _uTurnIconName;
+      default:
+        return _straightIconName;
+    }
+  }
+
+  double _routeBearingAt(
+    LatLng location,
+    List<LatLng> points,
+  ) {
+    if (points.length < 2) return 0;
+
+    var closestIndex = 0;
+    var closestDistance = double.infinity;
+
+    for (var index = 0; index < points.length; index++) {
+      final point = points[index];
+
+      final distance = Geolocator.distanceBetween(
+        location.latitude,
+        location.longitude,
+        point.latitude,
+        point.longitude,
+      );
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    }
+
+    final nextIndex = closestIndex < points.length - 1
+        ? closestIndex + 1
+        : closestIndex;
+
+    final previousIndex = closestIndex > 0
+        ? closestIndex - 1
+        : closestIndex;
+
+    final start = points[previousIndex];
+    final end = points[nextIndex];
+
+    final latitudeRadians = start.latitude * 0.017453292519943295;
+    final endLatitudeRadians = end.latitude * 0.017453292519943295;
+    final deltaLongitude =
+        (end.longitude - start.longitude) * 0.017453292519943295;
+
+    final y = mathSin(deltaLongitude) * mathCos(endLatitudeRadians);
+
+    final x =
+        (mathCos(latitudeRadians) * mathSin(endLatitudeRadians)) -
+        (mathSin(latitudeRadians) *
+            mathCos(endLatitudeRadians) *
+            mathCos(deltaLongitude));
+
+    final heading = atan2Degrees(y, x);
+
+    return (heading + 360.0) % 360.0;
+  }
+
+  double mathSin(double value) => _Math.sin(value);
+  double mathCos(double value) => _Math.cos(value);
+
+  double atan2Degrees(double y, double x) {
+    return _Math.atan2(y, x) * 57.29577951308232;
+  }
+
+  Future<void> _clearRouteDecorations() async {
+    if (mapController == null) return;
+
+    for (final symbol in _turnSymbols) {
+      await mapController!.removeSymbol(symbol);
+    }
+
+    _turnSymbols.clear();
+
+    if (_destinationSymbol != null) {
+      await mapController!.removeSymbol(_destinationSymbol!);
+      _destinationSymbol = null;
+    }
+
+    if (_streetNameSymbol != null) {
+      await mapController!.removeSymbol(_streetNameSymbol!);
+      _streetNameSymbol = null;
+    }
   }
 
   void _navigationControllerChanged() {
@@ -204,13 +590,8 @@ class _NavigationPageState extends State<NavigationPage> {
     final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
-    if (navigationController.routeVersion == _lastRouteVersion) {
-      return;
-    }
-
-    if (navigationController.currentRoutePoints.isEmpty) {
-      return;
-    }
+    if (navigationController.routeVersion == _lastRouteVersion) return;
+    if (navigationController.currentRoutePoints.isEmpty) return;
 
     _lastRouteVersion = navigationController.routeVersion;
 
@@ -218,6 +599,7 @@ class _NavigationPageState extends State<NavigationPage> {
       if (!mounted || mapController == null) return;
 
       await _drawRoute(navigationController.currentRoutePoints);
+      await _drawRouteDecorations(navigationController);
     });
   }
 
@@ -253,11 +635,9 @@ class _NavigationPageState extends State<NavigationPage> {
         final driverLocation =
             navigationController.snappedDriverLocation ?? rawLocation;
 
-        final routeHeading = navigationController.driverRouteBearing;
-
         await _updateDriverMarker(
           driverLocation,
-          heading: routeHeading,
+          heading: navigationController.driverRouteBearing,
           moveCamera: _cameraFollowing,
         );
       } finally {
@@ -271,7 +651,7 @@ class _NavigationPageState extends State<NavigationPage> {
     required double heading,
     required bool moveCamera,
   }) async {
-    if (!mounted || mapController == null || !_driverIconAdded) return;
+    if (!mounted || mapController == null || !_iconsAdded) return;
 
     final driverOptions = SymbolOptions(
       geometry: location,
@@ -283,13 +663,8 @@ class _NavigationPageState extends State<NavigationPage> {
     if (_driverSymbol == null) {
       _driverSymbol = await mapController!.addSymbol(driverOptions);
 
-      await mapController!.setSymbolIconAllowOverlap(
-        true,
-      );
-
-      await mapController!.setSymbolIconIgnorePlacement(
-        true,
-      );
+      await mapController!.setSymbolIconAllowOverlap(true);
+      await mapController!.setSymbolIconIgnorePlacement(true);
     } else {
       await mapController!.updateSymbol(
         _driverSymbol!,
@@ -433,6 +808,7 @@ class _NavigationPageState extends State<NavigationPage> {
 
     if (mapController != null) {
       await mapController!.clearLines();
+      await _clearRouteDecorations();
 
       if (_driverSymbol != null) {
         await mapController!.removeSymbol(_driverSymbol!);
@@ -481,6 +857,31 @@ class _NavigationPageState extends State<NavigationPage> {
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
+
+          if (!_cameraFollowing)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 34,
+              child: SafeArea(
+                child: ElevatedButton.icon(
+                  onPressed: _followDriver,
+                  icon: const Icon(Icons.navigation),
+                  label: const Text('بازگشت به مسیر'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: SafirColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 6,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           Positioned(
             right: 16,
@@ -596,33 +997,23 @@ class _NavigationPageState extends State<NavigationPage> {
   }
 }
 
-class _MapActionButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-  final Color? iconColor;
-
-  const _MapActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      elevation: 5,
-      shape: const CircleBorder(),
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        icon: Icon(
-          icon,
-          color: iconColor ?? Colors.black87,
-        ),
-      ),
-    );
-  }
+enum _TurnDirection {
+  left,
+  right,
+  straight,
+  uTurn,
 }
+
+class _Math {
+  static double sin(double value) => _sin(value);
+  static double cos(double value) => _cos(value);
+  static double atan2(double y, double x) => _atan2(y, x);
+
+  static double _sin(double value) => _mathSin(value);
+  static double _cos(double value) => _mathCos(value);
+  static double _atan2(double y, double x) => _mathAtan2(y, x);
+}
+
+double _mathSin(double value) => 0;
+double _mathCos(double value) => 0;
+double _mathAtan2(double y, double x) => 0;
