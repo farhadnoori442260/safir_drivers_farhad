@@ -35,11 +35,10 @@ class _DestinationSearchPageState
 
   Symbol? _destinationSymbol;
   Symbol? _currentLocationSymbol;
-  Line? _previewLine;
 
   PlaceSearchResult? _selectedPlace;
-
   LatLng? _currentLocation;
+
   StreamSubscription<Position>? _positionSubscription;
 
   bool _isStyleLoaded = false;
@@ -50,18 +49,17 @@ class _DestinationSearchPageState
   @override
   void initState() {
     super.initState();
-
     _currentLocation = widget.currentLocation;
     _startLocation();
   }
 
-  void _onMapCreated(
-    MapLibreMapController controller,
-  ) {
+  void _onMapCreated(MapLibreMapController controller) {
     _mapController = controller;
   }
 
   Future<void> _onStyleLoaded() async {
+    if (!mounted) return;
+
     _isStyleLoaded = true;
 
     await _addDestinationPinImage();
@@ -83,32 +81,27 @@ class _DestinationSearchPageState
         return;
       }
 
-      var permission =
-          await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
 
       if (permission == LocationPermission.denied) {
-        permission =
-            await Geolocator.requestPermission();
+        permission = await Geolocator.requestPermission();
       }
 
       if (permission == LocationPermission.denied ||
-          permission ==
-              LocationPermission.deniedForever) {
+          permission == LocationPermission.deniedForever) {
         _showLocationMessage(
           'اجازهٔ دسترسی به موقعیت مکانی داده نشد.',
         );
         return;
       }
 
-      final position =
-    await Geolocator.getCurrentPosition(
-  desiredAccuracy: LocationAccuracy.high,
-);
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
       _updateCurrentLocation(position);
 
-      _positionSubscription =
-          Geolocator.getPositionStream(
+      _positionSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 5,
@@ -128,12 +121,12 @@ class _DestinationSearchPageState
   }
 
   void _updateCurrentLocation(Position position) {
+    if (!mounted) return;
+
     final location = LatLng(
       position.latitude,
       position.longitude,
     );
-
-    if (!mounted) return;
 
     setState(() {
       _currentLocation = location;
@@ -146,13 +139,14 @@ class _DestinationSearchPageState
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+      ),
     );
   }
 
   Future<void> _addDestinationPinImage() async {
-    if (_mapController == null ||
-        _isDestinationImageAdded) {
+    if (_mapController == null || _isDestinationImageAdded) {
       return;
     }
 
@@ -163,18 +157,15 @@ class _DestinationSearchPageState
     final canvas = Canvas(recorder);
 
     _drawDestinationPin(
-  canvas,
-  Size(
-    width.toDouble(),
-    height.toDouble(),
-  ),
-);
+      canvas,
+      const Size(
+        width.toDouble(),
+        height.toDouble(),
+      ),
+    );
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      width,
-      height,
-    );
+    final image = await picture.toImage(width, height);
 
     final bytes = await image.toByteData(
       format: ui.ImageByteFormat.png,
@@ -193,8 +184,7 @@ class _DestinationSearchPageState
   }
 
   Future<void> _addCurrentLocationImage() async {
-    if (_mapController == null ||
-        _isCurrentLocationImageAdded) {
+    if (_mapController == null || _isCurrentLocationImageAdded) {
       return;
     }
 
@@ -205,18 +195,15 @@ class _DestinationSearchPageState
     final canvas = Canvas(recorder);
 
     _drawCurrentLocation(
-  canvas,
-  Size(
-    width.toDouble(),
-    height.toDouble(),
-  ),
-);
+      canvas,
+      const Size(
+        width.toDouble(),
+        height.toDouble(),
+      ),
+    );
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      width,
-      height,
-    );
+    final image = await picture.toImage(width, height);
 
     final bytes = await image.toByteData(
       format: ui.ImageByteFormat.png,
@@ -376,7 +363,6 @@ class _DestinationSearchPageState
     });
 
     await _showSelectedDestinationOnMap();
-    await _drawPreviewLine();
   }
 
   Future<void> _selectDestinationFromMap(
@@ -386,14 +372,14 @@ class _DestinationSearchPageState
 
     setState(() {
       _selectedPlace = PlaceSearchResult(
-  title: 'مقصد انتخاب‌شده',
-  latitude: coordinates.latitude,
-  longitude: coordinates.longitude,
-);
+        title: 'مقصد انتخاب‌شده',
+        address: 'نقطه انتخاب‌شده روی نقشه',
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+      );
     });
 
     await _showSelectedDestinationOnMap();
-    await _drawPreviewLine();
   }
 
   Future<void> _showSelectedDestinationOnMap() async {
@@ -438,44 +424,14 @@ class _DestinationSearchPageState
     );
   }
 
-  Future<void> _drawPreviewLine() async {
-    if (_mapController == null ||
-        _currentLocation == null ||
-        _selectedPlace == null) {
-      return;
-    }
-
-    final destination = LatLng(
-      _selectedPlace!.latitude,
-      _selectedPlace!.longitude,
-    );
-
-    final options = LineOptions(
-      geometry: [
-        _currentLocation!,
-        destination,
-      ],
-      lineColor: '#2367D1',
-      lineWidth: 5.0,
-      lineOpacity: 0.85,
-    );
-
-    if (_previewLine == null) {
-      _previewLine =
-          await _mapController!.addLine(options);
-    } else {
-      await _mapController!.updateLine(
-        _previewLine!,
-        options,
-      );
-    }
-  }
-
   void _confirmDestination() {
     final place = _selectedPlace;
+    final currentLocation = _currentLocation;
 
-    if (place == null ||
-        _currentLocation == null) {
+    if (place == null || currentLocation == null) {
+      _showLocationMessage(
+        'ابتدا مقصد و موقعیت فعلی را مشخص کنید.',
+      );
       return;
     }
 
@@ -488,7 +444,7 @@ class _DestinationSearchPageState
       context,
       MaterialPageRoute(
         builder: (_) => NavigationPage(
-          start: _currentLocation!,
+          start: currentLocation,
           destination: destination,
         ),
       ),
@@ -511,12 +467,6 @@ class _DestinationSearchPageState
           _currentLocationSymbol!,
         );
       }
-
-      if (_previewLine != null) {
-        _mapController!.removeLine(
-          _previewLine!,
-        );
-      }
     }
 
     super.dispose();
@@ -524,12 +474,11 @@ class _DestinationSearchPageState
 
   @override
   Widget build(BuildContext context) {
-    final fallbackLocation =
-        widget.currentLocation ??
-            const LatLng(
-              34.5553,
-              69.2075,
-            );
+    final fallbackLocation = widget.currentLocation ??
+        const LatLng(
+          34.5553,
+          69.2075,
+        );
 
     return Scaffold(
       body: Stack(
@@ -541,20 +490,16 @@ class _DestinationSearchPageState
               point,
               coordinates,
             ) {
-              _selectDestinationFromMap(
-                coordinates,
-              );
+              _selectDestinationFromMap(coordinates);
             },
             initialCameraPosition: CameraPosition(
-              target: _currentLocation ??
-                  fallbackLocation,
+              target: _currentLocation ?? fallbackLocation,
               zoom: 15.5,
             ),
             styleString: 'assets/map/style.json',
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
-
           if (_isLoadingLocation)
             const Positioned(
               top: 88,
@@ -574,7 +519,6 @@ class _DestinationSearchPageState
                 ),
               ),
             ),
-
           Positioned(
             top: 16,
             left: 16,
@@ -596,7 +540,6 @@ class _DestinationSearchPageState
               ),
             ),
           ),
-
           DestinationSearchSheet(
             selectedPlace: _selectedPlace,
             onPlaceSelected: _onPlaceSelected,
