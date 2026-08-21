@@ -71,7 +71,6 @@ class NavigationController extends ChangeNotifier {
   IconData _currentTurnIcon = Icons.straight;
 
   bool get isVoiceEnabled => _isVoiceEnabled;
-
   int get distanceToNextTurn => distanceToNextStep.ceil();
 
   String get navigationInstruction =>
@@ -80,6 +79,8 @@ class NavigationController extends ChangeNotifier {
   IconData get currentTurnIcon => _currentTurnIcon;
 
   List<LatLng> get currentRoutePoints => List.unmodifiable(routePoints);
+
+  List<StepInstruction> get routeSteps => List.unmodifiable(_steps);
 
   void toggleVoice() {
     _isVoiceEnabled = !_isVoiceEnabled;
@@ -113,26 +114,17 @@ class NavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startNavigationSimulated() {
-    isNavigating = true;
-    _currentStepIndex = 0;
-    _lastMatchedSegmentIndex = 0;
-    _spokenSteps.clear();
-    notifyListeners();
-  }
-
   Future<List<LatLng>> startNavigation([
     LatLng? start,
     LatLng? destination,
     String langCode = 'fa',
   ]) async {
-    if (start == null || destination == null) {
-      return [];
-    }
+    if (start == null || destination == null) return [];
 
     isNavigating = true;
     isRerouting = false;
     _activeLangCode = langCode;
+
     activeDestination = destination;
     rawDriverLocation = start;
     snappedDriverLocation = start;
@@ -186,9 +178,7 @@ class NavigationController extends ChangeNotifier {
     LatLng driverLatLng, {
     String? langCode,
   }) {
-    if (!isNavigating || routePoints.length < 2) {
-      return;
-    }
+    if (!isNavigating || routePoints.length < 2) return;
 
     if (langCode != null) {
       _activeLangCode = langCode;
@@ -208,42 +198,35 @@ class NavigationController extends ChangeNotifier {
       snappedDriverLocation = driverLatLng;
     }
 
-    if (_steps.isEmpty || _currentStepIndex >= _steps.length) {
-      if (distanceFromRoute > 50 && !isRerouting) {
-        _rerouteFromCurrentLocation(driverLatLng);
+    if (_steps.isNotEmpty && _currentStepIndex < _steps.length) {
+      final currentStep = _steps[_currentStepIndex];
+
+      distanceToNextStep = Geolocator.distanceBetween(
+        snappedDriverLocation!.latitude,
+        snappedDriverLocation!.longitude,
+        currentStep.location.latitude,
+        currentStep.location.longitude,
+      );
+
+      if (distanceToNextStep <= 50 &&
+          !_spokenSteps.contains(_currentStepIndex)) {
+        _spokenSteps.add(_currentStepIndex);
+
+        if (_isVoiceEnabled) {
+          VoiceGuidanceHelper.speakStep(
+            currentStep.modifier,
+            currentStep.streetName,
+            distanceToNextStep.toInt(),
+            _activeLangCode,
+          );
+        }
       }
 
-      notifyListeners();
-      return;
-    }
-
-    final currentStep = _steps[_currentStepIndex];
-
-    final distance = Geolocator.distanceBetween(
-      snappedDriverLocation!.latitude,
-      snappedDriverLocation!.longitude,
-      currentStep.location.latitude,
-      currentStep.location.longitude,
-    );
-
-    distanceToNextStep = distance;
-
-    if (distance <= 50 && !_spokenSteps.contains(_currentStepIndex)) {
-      _spokenSteps.add(_currentStepIndex);
-
-      if (_isVoiceEnabled) {
-        VoiceGuidanceHelper.speakStep(
-          currentStep.modifier,
-          currentStep.streetName,
-          distance.toInt(),
-          _activeLangCode,
-        );
+      if (distanceToNextStep < 15 &&
+          _currentStepIndex < _steps.length - 1) {
+        _currentStepIndex++;
+        _updateCurrentStepInfo(notify: false);
       }
-    }
-
-    if (distance < 15 && _currentStepIndex < _steps.length - 1) {
-      _currentStepIndex++;
-      _updateCurrentStepInfo();
     }
 
     if (distanceFromRoute > 50 && !isRerouting) {
@@ -277,9 +260,7 @@ class NavigationController extends ChangeNotifier {
       final data = json.decode(response.body) as Map<String, dynamic>;
       final routes = data['routes'] as List?;
 
-      if (routes == null || routes.isEmpty) {
-        return null;
-      }
+      if (routes == null || routes.isEmpty) return null;
 
       return routes.first as Map<String, dynamic>;
     } catch (e) {
@@ -336,9 +317,7 @@ class NavigationController extends ChangeNotifier {
   }
 
   Future<void> _rerouteFromCurrentLocation(LatLng from) async {
-    if (activeDestination == null || isRerouting) {
-      return;
-    }
+    if (activeDestination == null || isRerouting) return;
 
     isRerouting = true;
     notifyListeners();
@@ -431,9 +410,7 @@ class NavigationController extends ChangeNotifier {
     final deltaY = endY - startY;
     final lengthSquared = (deltaX * deltaX) + (deltaY * deltaY);
 
-    if (lengthSquared == 0) {
-      return segmentStart;
-    }
+    if (lengthSquared == 0) return segmentStart;
 
     var projection = (
           ((pointX - startX) * deltaX) +
@@ -470,9 +447,7 @@ class NavigationController extends ChangeNotifier {
   }
 
   void _updateCurrentStepInfo({bool notify = true}) {
-    if (_currentStepIndex >= _steps.length) {
-      return;
-    }
+    if (_currentStepIndex >= _steps.length) return;
 
     final step = _steps[_currentStepIndex];
 
@@ -485,9 +460,7 @@ class NavigationController extends ChangeNotifier {
 
     _currentTurnIcon = _getIconFromModifier(step.modifier);
 
-    if (notify) {
-      notifyListeners();
-    }
+    if (notify) notifyListeners();
   }
 
   String _instructionFromModifier(String modifier) {
