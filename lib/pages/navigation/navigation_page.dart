@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -32,20 +33,17 @@ class _NavigationPageState extends State<NavigationPage> {
   static const String _straightIconName = 'safir-turn-straight';
   static const String _uTurnIconName = 'safir-turn-uturn';
 
-  MapLibreMapController? mapController;
+  MapLibreMapController? _mapController;
   StreamSubscription<Position>? _positionStream;
 
   Symbol? _driverSymbol;
   Symbol? _destinationSymbol;
-  Symbol? _streetNameSymbol;
-
   final List<Symbol> _turnSymbols = [];
 
   bool _mapStyleReady = false;
   bool _navigationStarted = false;
   bool _controllerListenerAdded = false;
   bool _iconsAdded = false;
-
   bool _cameraFollowing = true;
   bool _isUpdatingMap = false;
   bool _isProgrammaticCameraMove = false;
@@ -53,7 +51,7 @@ class _NavigationPageState extends State<NavigationPage> {
   int _lastRouteVersion = 0;
 
   void _onMapCreated(MapLibreMapController controller) {
-    mapController = controller;
+    _mapController = controller;
   }
 
   Future<void> _onStyleLoaded() async {
@@ -75,7 +73,7 @@ class _NavigationPageState extends State<NavigationPage> {
   }
 
   Future<void> _addMapImages() async {
-    if (mapController == null || _iconsAdded) return;
+    if (_mapController == null || _iconsAdded) return;
 
     await _addCanvasImage(
       _driverIconName,
@@ -144,11 +142,14 @@ class _NavigationPageState extends State<NavigationPage> {
     required int width,
     required int height,
   }) async {
-    if (mapController == null) return;
+    if (_mapController == null) return;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final size = Size(width.toDouble(), height.toDouble());
+    final size = Size(
+      width.toDouble(),
+      height.toDouble(),
+    );
 
     painter(canvas, size);
 
@@ -158,16 +159,19 @@ class _NavigationPageState extends State<NavigationPage> {
       format: ui.ImageByteFormat.png,
     );
 
-    if (bytes == null || mapController == null) return;
+    if (bytes == null || _mapController == null) return;
 
-    await mapController!.addImage(
+    await _mapController!.addImage(
       name,
       bytes.buffer.asUint8List(),
     );
   }
 
   void _drawDriverArrow(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
+    final center = Offset(
+      size.width / 2,
+      size.height / 2,
+    );
 
     final path = Path()
       ..moveTo(center.dx, 8)
@@ -180,14 +184,25 @@ class _NavigationPageState extends State<NavigationPage> {
       )
       ..lineTo(center.dx, size.height - 35)
       ..lineTo(27, size.height - 15)
-      ..quadraticBezierTo(16, size.height - 10, 18, size.height - 19)
+      ..quadraticBezierTo(
+        16,
+        size.height - 10,
+        18,
+        size.height - 19,
+      )
       ..close();
 
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(0.26)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        8,
+      );
 
-    canvas.drawPath(path.shift(const Offset(0, 5)), shadowPaint);
+    canvas.drawPath(
+      path.shift(const Offset(0, 5)),
+      shadowPaint,
+    );
 
     final borderPaint = Paint()
       ..color = Colors.white
@@ -197,19 +212,17 @@ class _NavigationPageState extends State<NavigationPage> {
 
     canvas.drawPath(path, borderPaint);
 
-    final fillPaint = Paint()
-      ..color = SafirColors.primary
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(
+      path,
+      Paint()..color = SafirColors.primary,
+    );
   }
 
   void _drawDestinationPin(Canvas canvas, Size size) {
     final centerX = size.width / 2;
-    final top = 8.0;
     final pinBottom = size.height - 8.0;
 
-    final pinPath = Path()
+    final path = Path()
       ..moveTo(centerX, pinBottom)
       ..cubicTo(
         12,
@@ -217,7 +230,7 @@ class _NavigationPageState extends State<NavigationPage> {
         10,
         22,
         centerX,
-        top,
+        8,
       )
       ..cubicTo(
         size.width - 10,
@@ -231,35 +244,38 @@ class _NavigationPageState extends State<NavigationPage> {
 
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(0.24)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        6,
+      );
 
-    canvas.drawPath(pinPath.shift(const Offset(0, 4)), shadowPaint);
+    canvas.drawPath(
+      path.shift(const Offset(0, 4)),
+      shadowPaint,
+    );
 
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 7;
 
-    canvas.drawPath(pinPath, borderPaint);
+    canvas.drawPath(path, borderPaint);
 
-    final fillPaint = Paint()..color = const Color(0xFFE84242);
-
-    canvas.drawPath(pinPath, fillPaint);
-
-    final circlePaint = Paint()..color = Colors.white;
+    canvas.drawPath(
+      path,
+      Paint()..color = const Color(0xFFE84242),
+    );
 
     canvas.drawCircle(
       Offset(centerX, 43),
       13,
-      circlePaint,
+      Paint()..color = Colors.white,
     );
-
-    final dotPaint = Paint()..color = const Color(0xFFE84242);
 
     canvas.drawCircle(
       Offset(centerX, 43),
       7,
-      dotPaint,
+      Paint()..color = const Color(0xFFE84242),
     );
   }
 
@@ -268,11 +284,10 @@ class _NavigationPageState extends State<NavigationPage> {
     Size size, {
     required _TurnDirection direction,
   }) {
-    final center = Offset(size.width / 2, size.height / 2);
-
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+    final center = Offset(
+      size.width / 2,
+      size.height / 2,
+    );
 
     final path = Path();
 
@@ -333,7 +348,17 @@ class _NavigationPageState extends State<NavigationPage> {
         ..close();
     }
 
-    canvas.drawPath(path.shift(const Offset(0, 3)), shadowPaint);
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.25)
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        5,
+      );
+
+    canvas.drawPath(
+      path.shift(const Offset(0, 3)),
+      shadowPaint,
+    );
 
     final borderPaint = Paint()
       ..color = Colors.white
@@ -343,15 +368,16 @@ class _NavigationPageState extends State<NavigationPage> {
 
     canvas.drawPath(path, borderPaint);
 
-    final fillPaint = Paint()
-      ..color = const Color(0xFF168A61)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(
+      path,
+      Paint()..color = const Color(0xFF168A61),
+    );
   }
 
   Future<void> _startNavigation() async {
-    if (!_mapStyleReady || _navigationStarted || mapController == null) {
+    if (!_mapStyleReady ||
+        _navigationStarted ||
+        _mapController == null) {
       return;
     }
 
@@ -366,7 +392,9 @@ class _NavigationPageState extends State<NavigationPage> {
       context.locale.languageCode,
     );
 
-    if (!mounted || mapController == null || routePoints.isEmpty) {
+    if (!mounted ||
+        _mapController == null ||
+        routePoints.isEmpty) {
       _navigationStarted = false;
       return;
     }
@@ -384,11 +412,15 @@ class _NavigationPageState extends State<NavigationPage> {
   }
 
   Future<void> _drawRoute(List<LatLng> points) async {
-    if (!mounted || mapController == null || points.isEmpty) return;
+    if (!mounted ||
+        _mapController == null ||
+        points.length < 2) {
+      return;
+    }
 
-    await mapController!.clearLines();
+    await _mapController!.clearLines();
 
-    await mapController!.addLine(
+    await _mapController!.addLine(
       LineOptions(
         geometry: points,
         lineColor: '#07553F',
@@ -397,7 +429,7 @@ class _NavigationPageState extends State<NavigationPage> {
       ),
     );
 
-    await mapController!.addLine(
+    await _mapController!.addLine(
       LineOptions(
         geometry: points,
         lineColor: '#10B981',
@@ -406,7 +438,7 @@ class _NavigationPageState extends State<NavigationPage> {
       ),
     );
 
-    await mapController!.addLine(
+    await _mapController!.addLine(
       LineOptions(
         geometry: points,
         lineColor: '#B8FFE3',
@@ -419,11 +451,11 @@ class _NavigationPageState extends State<NavigationPage> {
   Future<void> _drawRouteDecorations(
     NavigationController navigationController,
   ) async {
-    if (mapController == null) return;
+    if (_mapController == null) return;
 
     await _clearRouteDecorations();
 
-    _destinationSymbol = await mapController!.addSymbol(
+    _destinationSymbol = await _mapController!.addSymbol(
       SymbolOptions(
         geometry: widget.destination,
         iconImage: _destinationIconName,
@@ -431,23 +463,21 @@ class _NavigationPageState extends State<NavigationPage> {
       ),
     );
 
-    await mapController!.setSymbolIconAllowOverlap(true);
-    await mapController!.setSymbolIconIgnorePlacement(true);
+    await _mapController!.setSymbolIconAllowOverlap(true);
+    await _mapController!.setSymbolIconIgnorePlacement(true);
 
-    final steps = navigationController.routeSteps;
-
-    for (var index = 0; index < steps.length; index++) {
-      final step = steps[index];
+    for (var index = 0;
+        index < navigationController.routeSteps.length;
+        index++) {
+      final step = navigationController.routeSteps[index];
 
       if (step.distance < 18) continue;
       if (index == 0 && step.modifier == 'straight') continue;
 
-      final iconName = _turnIconName(step.modifier);
-
-      final turnSymbol = await mapController!.addSymbol(
+      final symbol = await _mapController!.addSymbol(
         SymbolOptions(
           geometry: step.location,
-          iconImage: iconName,
+          iconImage: _turnIconName(step.modifier),
           iconSize: 0.44,
           iconRotate: _routeBearingAt(
             step.location,
@@ -456,33 +486,7 @@ class _NavigationPageState extends State<NavigationPage> {
         ),
       );
 
-      _turnSymbols.add(turnSymbol);
-    }
-
-    final firstStreetStep = steps.firstWhere(
-      (step) => step.streetName.trim().isNotEmpty,
-      orElse: () => StepInstruction(
-        instruction: 'straight',
-        streetName: '',
-        modifier: 'straight',
-        location: widget.start,
-        distance: 0,
-      ),
-    );
-
-    if (firstStreetStep.streetName.trim().isNotEmpty) {
-      _streetNameSymbol = await mapController!.addSymbol(
-        SymbolOptions(
-          geometry: firstStreetStep.location,
-          textField: firstStreetStep.streetName,
-          textSize: 14.0,
-          textColor: '#0F2B22',
-          textHaloColor: '#FFFFFF',
-          textHaloWidth: 2.5,
-          textAnchor: 'bottom',
-          textOffset: const Offset(0, -2.2),
-        ),
-      );
+      _turnSymbols.add(symbol);
     }
   }
 
@@ -528,76 +532,86 @@ class _NavigationPageState extends State<NavigationPage> {
       }
     }
 
-    final nextIndex = closestIndex < points.length - 1
-        ? closestIndex + 1
-        : closestIndex;
-
     final previousIndex = closestIndex > 0
         ? closestIndex - 1
+        : closestIndex;
+
+    final nextIndex = closestIndex < points.length - 1
+        ? closestIndex + 1
         : closestIndex;
 
     final start = points[previousIndex];
     final end = points[nextIndex];
 
-    final latitudeRadians = start.latitude * 0.017453292519943295;
-    final endLatitudeRadians = end.latitude * 0.017453292519943295;
-    final deltaLongitude =
-        (end.longitude - start.longitude) * 0.017453292519943295;
+    final startLatitude =
+        start.latitude * math.pi / 180.0;
+    final endLatitude = end.latitude * math.pi / 180.0;
+    final longitudeDifference =
+        (end.longitude - start.longitude) *
+            math.pi /
+            180.0;
 
-    final y = math.sin(deltaLongitude) * math.cos(endLatitudeRadians);
+    final y = math.sin(longitudeDifference) *
+        math.cos(endLatitude);
 
-final x =
-    (math.cos(latitudeRadians) * math.sin(endLatitudeRadians)) -
-    (math.sin(latitudeRadians) *
-        math.cos(endLatitudeRadians) *
-        math.cos(deltaLongitude));
+    final x =
+        (math.cos(startLatitude) * math.sin(endLatitude)) -
+            (math.sin(startLatitude) *
+                math.cos(endLatitude) *
+                math.cos(longitudeDifference));
 
-final heading = math.atan2(y, x) * 57.29577951308232;
+    final heading = math.atan2(y, x) * 180.0 / math.pi;
 
     return (heading + 360.0) % 360.0;
   }
 
   Future<void> _clearRouteDecorations() async {
-    if (mapController == null) return;
+    if (_mapController == null) return;
 
     for (final symbol in _turnSymbols) {
-      await mapController!.removeSymbol(symbol);
+      await _mapController!.removeSymbol(symbol);
     }
 
     _turnSymbols.clear();
 
     if (_destinationSymbol != null) {
-      await mapController!.removeSymbol(_destinationSymbol!);
+      await _mapController!.removeSymbol(
+        _destinationSymbol!,
+      );
       _destinationSymbol = null;
-    }
-
-    if (_streetNameSymbol != null) {
-      await mapController!.removeSymbol(_streetNameSymbol!);
-      _streetNameSymbol = null;
     }
   }
 
   void _navigationControllerChanged() {
-    if (!mounted || !_mapStyleReady || mapController == null) return;
+    if (!mounted ||
+        !_mapStyleReady ||
+        _mapController == null) {
+      return;
+    }
 
     final navigationController =
         Provider.of<NavigationController>(context, listen: false);
 
-    if (navigationController.routeVersion == _lastRouteVersion) return;
-    if (navigationController.currentRoutePoints.isEmpty) return;
+    if (navigationController.routeVersion == _lastRouteVersion ||
+        navigationController.currentRoutePoints.isEmpty) {
+      return;
+    }
 
     _lastRouteVersion = navigationController.routeVersion;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || mapController == null) return;
+      if (!mounted || _mapController == null) return;
 
-      await _drawRoute(navigationController.currentRoutePoints);
+      await _drawRoute(
+        navigationController.currentRoutePoints,
+      );
+
       await _drawRouteDecorations(navigationController);
     });
   }
 
   Future<void> _startLiveDriverTracking() async {
-    if (!_mapStyleReady || mapController == null) return;
+    if (!_mapStyleReady || _mapController == null) return;
 
     await _positionStream?.cancel();
 
@@ -607,7 +621,11 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         distanceFilter: 2,
       ),
     ).listen((Position position) async {
-      if (!mounted || mapController == null || _isUpdatingMap) return;
+      if (!mounted ||
+          _mapController == null ||
+          _isUpdatingMap) {
+        return;
+      }
 
       _isUpdatingMap = true;
 
@@ -618,7 +636,10 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         );
 
         final navigationController =
-            Provider.of<NavigationController>(context, listen: false);
+            Provider.of<NavigationController>(
+          context,
+          listen: false,
+        );
 
         navigationController.updateDriverPosition(
           rawLocation,
@@ -626,7 +647,8 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         );
 
         final driverLocation =
-            navigationController.snappedDriverLocation ?? rawLocation;
+            navigationController.snappedDriverLocation ??
+                rawLocation;
 
         await _updateDriverMarker(
           driverLocation,
@@ -644,9 +666,13 @@ final heading = math.atan2(y, x) * 57.29577951308232;
     required double heading,
     required bool moveCamera,
   }) async {
-    if (!mounted || mapController == null || !_iconsAdded) return;
+    if (!mounted ||
+        _mapController == null ||
+        !_iconsAdded) {
+      return;
+    }
 
-    final driverOptions = SymbolOptions(
+    final options = SymbolOptions(
       geometry: location,
       iconImage: _driverIconName,
       iconSize: 0.58,
@@ -654,18 +680,18 @@ final heading = math.atan2(y, x) * 57.29577951308232;
     );
 
     if (_driverSymbol == null) {
-      _driverSymbol = await mapController!.addSymbol(driverOptions);
+      _driverSymbol = await _mapController!.addSymbol(options);
 
-      await mapController!.setSymbolIconAllowOverlap(true);
-      await mapController!.setSymbolIconIgnorePlacement(true);
+      await _mapController!.setSymbolIconAllowOverlap(true);
+      await _mapController!.setSymbolIconIgnorePlacement(true);
     } else {
-      await mapController!.updateSymbol(
+      await _mapController!.updateSymbol(
         _driverSymbol!,
-        driverOptions,
+        options,
       );
     }
 
-    if (!moveCamera || mapController == null) return;
+    if (!moveCamera) return;
 
     await _moveCameraToDriver(
       location,
@@ -677,12 +703,12 @@ final heading = math.atan2(y, x) * 57.29577951308232;
     LatLng location, {
     required double heading,
   }) async {
-    if (mapController == null) return;
+    if (_mapController == null) return;
 
     _isProgrammaticCameraMove = true;
 
     try {
-      await mapController!.animateCamera(
+      await _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: location,
@@ -691,7 +717,9 @@ final heading = math.atan2(y, x) * 57.29577951308232;
             tilt: 50.0,
           ),
         ),
-        duration: const Duration(milliseconds: 650),
+        duration: const Duration(
+          milliseconds: 650,
+        ),
       );
     } finally {
       Future.delayed(
@@ -706,7 +734,7 @@ final heading = math.atan2(y, x) * 57.29577951308232;
   }
 
   Future<void> _showFullRoute() async {
-    if (mapController == null) return;
+    if (_mapController == null) return;
 
     final navigationController =
         Provider.of<NavigationController>(context, listen: false);
@@ -719,7 +747,7 @@ final heading = math.atan2(y, x) * 57.29577951308232;
       _cameraFollowing = false;
     });
 
-    await mapController!.animateCamera(
+    await _mapController!.animateCamera(
       CameraUpdate.newLatLngBounds(
         _boundsFromPoints(points),
         left: 54.0,
@@ -727,18 +755,20 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         right: 54.0,
         bottom: 180.0,
       ),
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(
+        milliseconds: 700,
+      ),
     );
   }
 
   Future<void> _goToStart() async {
-    if (mapController == null) return;
+    if (_mapController == null) return;
 
     setState(() {
       _cameraFollowing = false;
     });
 
-    await mapController!.animateCamera(
+    await _mapController!.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: widget.start,
@@ -746,7 +776,9 @@ final heading = math.atan2(y, x) * 57.29577951308232;
           tilt: 35.0,
         ),
       ),
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(
+        milliseconds: 600,
+      ),
     );
   }
 
@@ -755,7 +787,8 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         Provider.of<NavigationController>(context, listen: false);
 
     final location =
-        navigationController.snappedDriverLocation ?? widget.start;
+        navigationController.snappedDriverLocation ??
+            widget.start;
 
     setState(() {
       _cameraFollowing = true;
@@ -774,15 +807,32 @@ final heading = math.atan2(y, x) * 57.29577951308232;
     var maxLongitude = points.first.longitude;
 
     for (final point in points) {
-      if (point.latitude < minLatitude) minLatitude = point.latitude;
-      if (point.latitude > maxLatitude) maxLatitude = point.latitude;
-      if (point.longitude < minLongitude) minLongitude = point.longitude;
-      if (point.longitude > maxLongitude) maxLongitude = point.longitude;
+      if (point.latitude < minLatitude) {
+        minLatitude = point.latitude;
+      }
+
+      if (point.latitude > maxLatitude) {
+        maxLatitude = point.latitude;
+      }
+
+      if (point.longitude < minLongitude) {
+        minLongitude = point.longitude;
+      }
+
+      if (point.longitude > maxLongitude) {
+        maxLongitude = point.longitude;
+      }
     }
 
     return LatLngBounds(
-      southwest: LatLng(minLatitude, minLongitude),
-      northeast: LatLng(maxLatitude, maxLongitude),
+      southwest: LatLng(
+        minLatitude,
+        minLongitude,
+      ),
+      northeast: LatLng(
+        maxLatitude,
+        maxLongitude,
+      ),
     );
   }
 
@@ -793,18 +843,22 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         Provider.of<NavigationController>(context, listen: false);
 
     if (_controllerListenerAdded) {
-      navigationController.removeListener(_navigationControllerChanged);
+      navigationController.removeListener(
+        _navigationControllerChanged,
+      );
       _controllerListenerAdded = false;
     }
 
     navigationController.stopNavigation();
 
-    if (mapController != null) {
-      await mapController!.clearLines();
+    if (_mapController != null) {
+      await _mapController!.clearLines();
       await _clearRouteDecorations();
 
       if (_driverSymbol != null) {
-        await mapController!.removeSymbol(_driverSymbol!);
+        await _mapController!.removeSymbol(
+          _driverSymbol!,
+        );
         _driverSymbol = null;
       }
     }
@@ -820,7 +874,9 @@ final heading = math.atan2(y, x) * 57.29577951308232;
         Provider.of<NavigationController>(context, listen: false);
 
     if (_controllerListenerAdded) {
-      navigationController.removeListener(_navigationControllerChanged);
+      navigationController.removeListener(
+        _navigationControllerChanged,
+      );
     }
 
     _positionStream?.cancel();
@@ -850,7 +906,6 @@ final heading = math.atan2(y, x) * 57.29577951308232;
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
-
           if (!_cameraFollowing)
             Positioned(
               left: 20,
@@ -859,8 +914,12 @@ final heading = math.atan2(y, x) * 57.29577951308232;
               child: SafeArea(
                 child: ElevatedButton.icon(
                   onPressed: _followDriver,
-                  icon: const Icon(Icons.navigation),
-                  label: const Text('بازگشت به مسیر'),
+                  icon: const Icon(
+                    Icons.navigation_rounded,
+                  ),
+                  label: const Text(
+                    'بازگشت به مسیر',
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: SafirColors.primary,
                     foregroundColor: Colors.white,
@@ -875,7 +934,6 @@ final heading = math.atan2(y, x) * 57.29577951308232;
                 ),
               ),
             ),
-
           Positioned(
             right: 16,
             bottom: 112,
@@ -884,7 +942,7 @@ final heading = math.atan2(y, x) * 57.29577951308232;
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _MapActionButton(
-                    icon: Icons.alt_route,
+                    icon: Icons.alt_route_rounded,
                     tooltip: 'نمایش کل مسیر',
                     onPressed: _showFullRoute,
                   ),
@@ -896,7 +954,7 @@ final heading = math.atan2(y, x) * 57.29577951308232;
                   ),
                   const SizedBox(height: 10),
                   _MapActionButton(
-                    icon: Icons.my_location,
+                    icon: Icons.my_location_rounded,
                     tooltip: 'بازگشت به راننده',
                     iconColor: SafirColors.primary,
                     onPressed: _followDriver,
@@ -905,7 +963,6 @@ final heading = math.atan2(y, x) * 57.29577951308232;
               ),
             ),
           ),
-
           Consumer<NavigationController>(
             builder: (context, controller, child) {
               if (!controller.isNavigating) {
@@ -940,7 +997,8 @@ final heading = math.atan2(y, x) * 57.29577951308232;
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
                               Text(
                                 '${controller.distanceToNextTurn} ${'meters'.tr()}',
@@ -965,15 +1023,15 @@ final heading = math.atan2(y, x) * 57.29577951308232;
                           onPressed: controller.toggleVoice,
                           icon: Icon(
                             controller.isVoiceEnabled
-                                ? Icons.volume_up
-                                : Icons.volume_off,
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
                             color: Colors.white,
                           ),
                         ),
                         IconButton(
                           onPressed: _stopNavigation,
                           icon: const Icon(
-                            Icons.close,
+                            Icons.close_rounded,
                             color: Colors.white,
                           ),
                         ),
@@ -996,6 +1054,7 @@ enum _TurnDirection {
   straight,
   uTurn,
 }
+
 class _MapActionButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
