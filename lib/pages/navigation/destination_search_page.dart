@@ -169,8 +169,6 @@ class _DestinationSearchPageState
     height.toDouble(),
   ),
 );
-      ),
-    );
 
     final picture = recorder.endRecording();
     final image = await picture.toImage(
@@ -213,8 +211,6 @@ class _DestinationSearchPageState
     height.toDouble(),
   ),
 );
-      ),
-    );
 
     final picture = recorder.endRecording();
     final image = await picture.toImage(
@@ -357,7 +353,6 @@ class _DestinationSearchPageState
       geometry: _currentLocation!,
       iconImage: _currentLocationImage,
       iconSize: 0.70,
-      iconIgnorePlacement: true,
     );
 
     if (_currentLocationSymbol == null) {
@@ -391,11 +386,9 @@ class _DestinationSearchPageState
 
     setState(() {
       _selectedPlace = PlaceSearchResult(
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        name: 'مقصد انتخاب‌شده',
-        address: 'نقطه انتخاب‌شده روی نقشه',
-      );
+  latitude: coordinates.latitude,
+  longitude: coordinates.longitude,
+);
     });
 
     await _showSelectedDestinationOnMap();
@@ -419,8 +412,6 @@ class _DestinationSearchPageState
       geometry: destination,
       iconImage: _destinationPinImage,
       iconSize: 0.70,
-      iconAllowOverlap: true,
-      iconIgnorePlacement: true,
     );
 
     if (_destinationSymbol == null) {
