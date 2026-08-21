@@ -284,12 +284,10 @@ class _NavigationPageState extends State<NavigationPage> {
       _driverSymbol = await mapController!.addSymbol(driverOptions);
 
       await mapController!.setSymbolIconAllowOverlap(
-        _driverSymbol!,
         true,
       );
 
       await mapController!.setSymbolIconIgnorePlacement(
-        _driverSymbol!,
         true,
       );
     } else {
