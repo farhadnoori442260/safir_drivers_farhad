@@ -557,13 +557,6 @@ final heading = math.atan2(y, x) * 57.29577951308232;
     return (heading + 360.0) % 360.0;
   }
 
-  double mathSin(double value) => _Math.sin(value);
-  double mathCos(double value) => _Math.cos(value);
-
-  double atan2Degrees(double y, double x) {
-    return _Math.atan2(y, x) * 57.29577951308232;
-  }
-
   Future<void> _clearRouteDecorations() async {
     if (mapController == null) return;
 
@@ -1002,4 +995,34 @@ enum _TurnDirection {
   right,
   straight,
   uTurn,
+}
+class _MapActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Color? iconColor;
+
+  const _MapActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 5,
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          color: iconColor ?? Colors.black87,
+        ),
+      ),
+    );
+  }
 }
