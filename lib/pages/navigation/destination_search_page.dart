@@ -5,8 +5,8 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../models/place_search_result.dart';
 import '../../utils/app_colors.dart';
-import 'navigation_page.dart';
 import '../../widgets/navigation/destination_search_sheet.dart';
+import 'navigation_page.dart';
 
 class DestinationSearchPage extends StatefulWidget {
   final LatLng driverLocation;
@@ -21,16 +21,24 @@ class DestinationSearchPage extends StatefulWidget {
       _DestinationSearchPageState();
 }
 
-class _DestinationSearchPageState extends State<DestinationSearchPage> {
-  static const String _destinationPinImage = 'safir-destination-select-pin';
+class _DestinationSearchPageState
+    extends State<DestinationSearchPage> {
+  static const String _destinationPinImage =
+      'safir-destination-select-pin';
+
+  static const String _driverPinImage =
+      'safir-driver-select-pin';
 
   MapLibreMapController? _mapController;
+
   Symbol? _destinationSymbol;
+  Symbol? _driverSymbol;
 
   PlaceSearchResult? _selectedPlace;
 
   bool _isStyleLoaded = false;
   bool _isDestinationImageAdded = false;
+  bool _isDriverImageAdded = false;
 
   void _onMapCreated(MapLibreMapController controller) {
     _mapController = controller;
@@ -40,18 +48,28 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
     _isStyleLoaded = true;
 
     await _addDestinationPinImage();
+    await _addDriverPinImage();
+
+    await _showDriverOnMap();
     await _showSelectedDestinationOnMap();
   }
 
   Future<void> _addDestinationPinImage() async {
-    if (_mapController == null || _isDestinationImageAdded) return;
+    if (_mapController == null ||
+        _isDestinationImageAdded) {
+      return;
+    }
 
     const width = 100;
     const height = 124;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final size = Size(width.toDouble(), height.toDouble());
+
+    final size = Size(
+      width.toDouble(),
+      height.toDouble(),
+    );
 
     _drawDestinationPin(canvas, size);
 
@@ -62,7 +80,9 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
       format: ui.ImageByteFormat.png,
     );
 
-    if (bytes == null || _mapController == null) return;
+    if (bytes == null || _mapController == null) {
+      return;
+    }
 
     await _mapController!.addImage(
       _destinationPinImage,
@@ -72,13 +92,61 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
     _isDestinationImageAdded = true;
   }
 
-  void _drawDestinationPin(Canvas canvas, Size size) {
+  Future<void> _addDriverPinImage() async {
+    if (_mapController == null ||
+        _isDriverImageAdded) {
+      return;
+    }
+
+    const width = 100;
+    const height = 100;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    final size = Size(
+      width.toDouble(),
+      height.toDouble(),
+    );
+
+    _drawDriverPin(canvas, size);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width, height);
+
+    final bytes = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+
+    if (bytes == null || _mapController == null) {
+      return;
+    }
+
+    await _mapController!.addImage(
+      _driverPinImage,
+      bytes.buffer.asUint8List(),
+    );
+
+    _isDriverImageAdded = true;
+  }
+
+  void _drawDestinationPin(
+    Canvas canvas,
+    Size size,
+  ) {
     final centerX = size.width / 2;
     final pinBottom = size.height - 7.0;
 
     final path = Path()
       ..moveTo(centerX, pinBottom)
-      ..cubicTo(12, size.height - 43, 10, 23, centerX, 8)
+      ..cubicTo(
+        12,
+        size.height - 43,
+        10,
+        23,
+        centerX,
+        8,
+      )
       ..cubicTo(
         size.width - 10,
         23,
@@ -91,9 +159,15 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
 
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(0.24)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        6,
+      );
 
-    canvas.drawPath(path.shift(const Offset(0, 4)), shadowPaint);
+    canvas.drawPath(
+      path.shift(const Offset(0, 4)),
+      shadowPaint,
+    );
 
     final borderPaint = Paint()
       ..color = Colors.white
@@ -103,7 +177,8 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
 
     canvas.drawPath(path, borderPaint);
 
-    final fillPaint = Paint()..color = const Color(0xFFE84C4C);
+    final fillPaint = Paint()
+      ..color = const Color(0xFFE84C4C);
 
     canvas.drawPath(path, fillPaint);
 
@@ -120,7 +195,85 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
     );
   }
 
-  Future<void> _onPlaceSelected(PlaceSearchResult place) async {
+  void _drawDriverPin(
+    Canvas canvas,
+    Size size,
+  ) {
+    final center = Offset(
+      size.width / 2,
+      size.height / 2,
+    );
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.24)
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        6,
+      );
+
+    canvas.drawCircle(
+      center.translate(0, 4),
+      31,
+      shadowPaint,
+    );
+
+    canvas.drawCircle(
+      center,
+      35,
+      Paint()..color = Colors.white,
+    );
+
+    canvas.drawCircle(
+      center,
+      28,
+      Paint()..color = SafirColors.primary,
+    );
+
+    final arrow = Path()
+      ..moveTo(center.dx, 15)
+      ..lineTo(center.dx + 18, 63)
+      ..lineTo(center.dx, 53)
+      ..lineTo(center.dx - 18, 63)
+      ..close();
+
+    canvas.drawPath(
+      arrow,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  Future<void> _showDriverOnMap() async {
+    if (!_isStyleLoaded ||
+        !_isDriverImageAdded ||
+        _mapController == null) {
+      return;
+    }
+
+    final options = SymbolOptions(
+      geometry: widget.driverLocation,
+      iconImage: _driverPinImage,
+      iconSize: 0.72,
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+    );
+
+    if (_driverSymbol == null) {
+      _driverSymbol = await _mapController!.addSymbol(
+        options,
+      );
+    } else {
+      await _mapController!.updateSymbol(
+        _driverSymbol!,
+        options,
+      );
+    }
+  }
+
+  Future<void> _onPlaceSelected(
+    PlaceSearchResult place,
+  ) async {
+    if (!mounted) return;
+
     setState(() {
       _selectedPlace = place;
     });
@@ -145,13 +298,13 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
       geometry: destination,
       iconImage: _destinationPinImage,
       iconSize: 0.70,
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
     );
 
     if (_destinationSymbol == null) {
-      _destinationSymbol = await _mapController!.addSymbol(options);
-
-      await _mapController!.setSymbolIconAllowOverlap(true);
-      await _mapController!.setSymbolIconIgnorePlacement(true);
+      _destinationSymbol =
+          await _mapController!.addSymbol(options);
     } else {
       await _mapController!.updateSymbol(
         _destinationSymbol!,
@@ -166,16 +319,20 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
           zoom: 16.5,
         ),
       ),
-      duration: const Duration(milliseconds: 550),
+      duration: const Duration(
+        milliseconds: 550,
+      ),
     );
   }
 
   void _confirmDestination() {
-    if (_selectedPlace == null) return;
+    final place = _selectedPlace;
+
+    if (place == null) return;
 
     final destination = LatLng(
-      _selectedPlace!.latitude,
-      _selectedPlace!.longitude,
+      place.latitude,
+      place.longitude,
     );
 
     Navigator.push(
@@ -191,8 +348,18 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
 
   @override
   void dispose() {
-    if (_mapController != null && _destinationSymbol != null) {
-      _mapController!.removeSymbol(_destinationSymbol!);
+    if (_mapController != null) {
+      if (_destinationSymbol != null) {
+        _mapController!.removeSymbol(
+          _destinationSymbol!,
+        );
+      }
+
+      if (_driverSymbol != null) {
+        _mapController!.removeSymbol(
+          _driverSymbol!,
+        );
+      }
     }
 
     super.dispose();
@@ -214,6 +381,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
             myLocationEnabled: false,
             trackCameraPosition: true,
           ),
+
           Positioned(
             top: 16,
             left: 16,
@@ -224,7 +392,9 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
                 shape: const CircleBorder(),
                 child: IconButton(
                   tooltip: 'بازگشت',
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
                   icon: const Icon(
                     Icons.arrow_back_rounded,
                     color: SafirColors.primary,
@@ -233,6 +403,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
               ),
             ),
           ),
+
           DestinationSearchSheet(
             selectedPlace: _selectedPlace,
             onPlaceSelected: _onPlaceSelected,
