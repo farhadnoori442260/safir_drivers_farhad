@@ -101,11 +101,9 @@ class _DestinationSearchPageState
       }
 
       final position =
-          await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+    await Geolocator.getCurrentPosition(
+  desiredAccuracy: LocationAccuracy.high,
+);
 
       _updateCurrentLocation(position);
 
@@ -165,10 +163,12 @@ class _DestinationSearchPageState
     final canvas = Canvas(recorder);
 
     _drawDestinationPin(
-      canvas,
-      const Size(
-        width.toDouble(),
-        height.toDouble(),
+  canvas,
+  Size(
+    width.toDouble(),
+    height.toDouble(),
+  ),
+);
       ),
     );
 
@@ -207,10 +207,12 @@ class _DestinationSearchPageState
     final canvas = Canvas(recorder);
 
     _drawCurrentLocation(
-      canvas,
-      const Size(
-        width.toDouble(),
-        height.toDouble(),
+  canvas,
+  Size(
+    width.toDouble(),
+    height.toDouble(),
+  ),
+);
       ),
     );
 
