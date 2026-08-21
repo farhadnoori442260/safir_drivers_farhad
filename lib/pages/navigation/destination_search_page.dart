@@ -51,7 +51,7 @@ class _DestinationSearchPageState extends State<DestinationSearchPage> {
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final size = const Size(width.toDouble(), height.toDouble());
+    final size = Size(width.toDouble(), height.toDouble());
 
     _drawDestinationPin(canvas, size);
 
